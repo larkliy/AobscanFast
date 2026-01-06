@@ -69,6 +69,7 @@ public readonly struct Pattern
         return new Pattern(pBytes, pMask, bestSeq, offset);
     }
 
+    [Obsolete]
     private static int FindFirstConcreteByteIndex(string[] tokens, byte[] pBytes, byte[] pMask)
     {
         int bestIndex = -1;

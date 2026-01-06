@@ -13,92 +13,127 @@ public class AobScan
     public AobScan(SafeProcessHandle processHandle) => _processHandle = processHandle;
 
     /// <summary>
-    /// Scans the process memory for occurrences of the specified pattern and returns the addresses where matches are
-    /// found within regions that meet the given access filter.
+    /// Scans the process memory for occurrences of the specified pattern, filtered by the given memory access
+    /// permissions.
     /// </summary>
-    /// <remarks>Scanning is performed in parallel across eligible memory regions to improve performance. The
-    /// method is thread-safe and can be called concurrently from multiple threads. The accuracy and completeness of
-    /// results depend on the accessibility of memory regions and the correctness of the pattern format.</remarks>
-    /// <param name="input">A string representing the pattern to search for in process memory. The format and interpretation of the pattern
-    /// are determined by the implementation of the Pattern class.</param>
-    /// <param name="accessFilter">A filter specifying the types of memory access permissions to include in the scan. Only memory regions matching
-    /// this filter will be searched.</param>
-    /// <returns>A list of memory addresses (as native integers) where the pattern was found. The list will be empty if no
-    /// matches are found.</returns>
-    public unsafe List<nint> Scan(string input, MemoryAccess accessFilter)
+    /// <remarks>The scan is performed in parallel across all memory regions matching the specified access
+    /// filter. The method throws an <see cref="OperationCanceledException"/> if the operation is canceled via the
+    /// provided cancellation token. This method is thread-safe.</remarks>
+    /// <param name="input">A string representation of the pattern to search for in process memory. The format must be compatible with the
+    /// pattern parser.</param>
+    /// <param name="accessFilter">A bitwise combination of memory access flags that determines which memory regions are included in the scan.</param>
+    /// <param name="ct">A cancellation token that can be used to cancel the scan operation. The default value is <see
+    /// cref="CancellationToken.None"/>.</param>
+    /// <returns>A list of memory addresses where the specified pattern was found. The list is empty if no matches are found.</returns>
+    public unsafe List<nint> Scan(string input, MemoryAccess accessFilter, CancellationToken ct = default)
     {
-        var finalResults = new List<nint>();
+        ct.ThrowIfCancellationRequested();
+
+        var finalResults = new List<nint>(capacity: 1024);
         var pattern = Pattern.Create(input);
         var regions = GetRegions(accessFilter, nint.MinValue, nint.MaxValue);
 
-        Parallel.ForEach(regions, new ParallelOptions { MaxDegreeOfParallelism = Environment.ProcessorCount * 2 },
-            () => new List<nint>(),
-
-            (mbi, loopState, threadLocalList) =>
+        try
+        {
+            Parallel.ForEach(regions, new ParallelOptions
             {
-                int regionsSize = (int)mbi.RegionSize;
+                MaxDegreeOfParallelism = Environment.ProcessorCount * 2,
+                CancellationToken = ct
+            },
+                () => new List<nint>(),
 
-                if (regionsSize <= 0) 
-                    return threadLocalList;
-
-                void* bufferPtr = NativeMemory.Alloc((nuint)regionsSize);
-                var buffer = new Span<byte>(bufferPtr, regionsSize);
-
-                try
+                (mbi, loopState, threadLocalList) =>
                 {
-                    if (NativeMethods.ReadProcessMemory(_processHandle, mbi.BaseAddress, buffer, (nuint)buffer.Length, out nuint bytesRead))
+                    int regionsSize = (int)mbi.RegionSize;
+
+                    if (regionsSize <= 0)
+                        return threadLocalList;
+
+                    void* bufferPtr = NativeMemory.Alloc((nuint)regionsSize);
+                    var buffer = new Span<byte>(bufferPtr, regionsSize);
+
+                    try
                     {
-                        int seqOffset = pattern.SearchSequenceOffset;
-                        ReadOnlySpan<byte> searchSeq = pattern.SearchSequence;
-                        int patternLength = pattern.Bytes.Length;
-
-                        int currentOffset = 0;
-
-                        while (true)
+                        if (NativeMethods.ReadProcessMemory(_processHandle, mbi.BaseAddress, buffer, (nuint)buffer.Length, out nuint bytesRead))
                         {
-                            ReadOnlySpan<byte> remainingSpan = buffer[currentOffset..];
-
-                            int hitIndex = remainingSpan.IndexOf(searchSeq);
-
-                            if (hitIndex == -1)
-                                break;
-
-                            int foundSeqPos = currentOffset + hitIndex;
-
-                            int patternStartPos = foundSeqPos - seqOffset;
-
-                            if (patternStartPos >= 0 && patternStartPos + patternLength <= regionsSize)
-                            {
-                                ReadOnlySpan<byte> candidateBytes = buffer.Slice(patternStartPos, patternLength);
-
-                                if (pattern.IsMatch(candidateBytes))
-                                {
-                                    threadLocalList.Add(mbi.BaseAddress + patternStartPos);
-                                }
-                            }
-
-                            currentOffset += hitIndex + 1;
+                            ScanRegionForPattern(in mbi, threadLocalList, in pattern, regionsSize, in buffer);
                         }
                     }
-                }
-                finally
-                {
-                    NativeMemory.Free(bufferPtr);
-                }
+                    finally
+                    {
+                        NativeMemory.Free(bufferPtr);
+                    }
 
-                return threadLocalList;
-            },
+                    return threadLocalList;
+                },
 
-            localList =>
-            {
-                lock (_syncRoot)
+                localList =>
                 {
-                    finalResults.AddRange(localList);
-                }
-            });
+                    lock (_syncRoot)
+                    {
+                        finalResults.AddRange(localList);
+                    }
+                });
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
 
 
         return finalResults;
+    }
+
+    private static void ScanRegionForPattern(
+        in MEMORY_BASIC_INFORMATION mbi,
+        List<nint> threadLocalList,
+        in Pattern pattern,
+        int regionsSize,
+        in Span<byte> buffer)
+    {
+        int seqOffset = pattern.SearchSequenceOffset;
+        ReadOnlySpan<byte> searchSeq = pattern.SearchSequence;
+        int patternLength = pattern.Bytes.Length;
+
+        int currentOffset = 0;
+
+        while (true)
+        {
+            ReadOnlySpan<byte> remainingSpan = buffer[currentOffset..];
+
+            int hitIndex = remainingSpan.IndexOf(searchSeq);
+
+            if (hitIndex == -1)
+                break;
+
+            int foundSeqPos = currentOffset + hitIndex;
+            int patternStartPos = foundSeqPos - seqOffset;
+
+            if (patternStartPos >= 0 && patternStartPos + patternLength <= regionsSize)
+            {
+                ReadOnlySpan<byte> candidateBytes = buffer.Slice(patternStartPos, patternLength);
+
+                if (pattern.IsMatch(candidateBytes))
+                {
+                    threadLocalList.Add(mbi.BaseAddress + patternStartPos);
+                }
+            }
+
+            currentOffset += hitIndex + 1;
+        }
+    }
+
+    /// <summary>
+    /// Asynchronously scans memory for values matching the specified input and access filter.
+    /// </summary>
+    /// <param name="input">The value or pattern to search for in memory.</param>
+    /// <param name="accessFilter">A filter that specifies the type of memory access to include in the scan.</param>
+    /// <param name="ct">A cancellation token that can be used to cancel the scan operation.</param>
+    /// <returns>A task that represents the asynchronous scan operation. The task result contains a list of memory addresses where
+    /// matches were found.</returns>
+    public Task<List<nint>> ScanAsync(string input, MemoryAccess accessFilter, CancellationToken ct = default)
+    {
+        return Task.Run(() => Scan(input, accessFilter, ct), ct);
     }
 
     private List<MEMORY_BASIC_INFORMATION> GetRegions(MemoryAccess accessFilter, nint searchStart, nint searchEnd)
