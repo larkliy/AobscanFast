@@ -90,23 +90,23 @@ public readonly struct Pattern
     [MethodImpl(MethodImplOptions.NoInlining)]
     public bool IsMatch(ReadOnlySpan<byte> data)
     {
-        int length = Bytes.Length;
+        nuint length = (nuint)Bytes.Length;
 
-        if (data.Length < length)
+        if ((nuint)data.Length < length)
             return false;
 
         ref var pBytes = ref MemoryMarshal.GetArrayDataReference(Bytes);
         ref var pMask = ref MemoryMarshal.GetArrayDataReference(Mask);
         ref var pData = ref MemoryMarshal.GetReference(data);
 
-        int i = 0;
+        nuint i = 0;
 
-        if (Vector.IsHardwareAccelerated)
+        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<byte>.Count)
         {
-            int vecSize = Vector<byte>.Count;
-            int simdEnd = length - vecSize;
+            nuint vecSize = (nuint)Vector<byte>.Count;
+            nuint lastVecOffset = length - vecSize;
 
-            while (i <= simdEnd)
+            while (i <= lastVecOffset)
             {
                 var vBytes = Unsafe.ReadUnaligned<Vector<byte>>(ref Unsafe.Add(ref pBytes, i));
                 var vMask = Unsafe.ReadUnaligned<Vector<byte>>(ref Unsafe.Add(ref pMask, i));
@@ -117,6 +117,7 @@ public readonly struct Pattern
 
                 i += vecSize;
             }
+
         }
 
         for (; i < length; i++)

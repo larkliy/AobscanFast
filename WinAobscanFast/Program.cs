@@ -3,18 +3,18 @@ using System.Diagnostics;
 using WinAobscanFast.Utils;
 using WinAobscanFast.Enums;
 
-var processId = ProcessUtils.FindByExeName("HD-Player.exe");
+var processId = ProcessUtils.FindByExeName("notepad.exe");
 using var processHandle = ProcessUtils.OpenProcessById(processId);
 
 var aob = new AobScan(processHandle);
 
-const int runs = 10;
+const int runs = 5000;
 
 long totalMs = 0;
 long totalTicks = 0;
 int found = 0;
 
-aob.Scan("20 20");
+aob.Scan("20 20 30 40 50 70 80 90 99");
 
 List<nint> list = null!;
 
@@ -22,7 +22,7 @@ for (int i = 0; i < runs; i++)
 {
     var sw = Stopwatch.StartNew();
 
-    list = aob.Scan("20 20 99 99 99 99");
+    list = aob.Scan("20 20 30 40 50 70 80 90 99");
 
     sw.Stop();
 
