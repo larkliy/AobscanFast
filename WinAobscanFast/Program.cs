@@ -22,7 +22,7 @@ for (int i = 0; i < runs; i++)
 {
     var sw = Stopwatch.StartNew();
 
-    list = aob.Scan("20 20");
+    list = aob.Scan("20 20 99 99 99 99");
 
     sw.Stop();
 
