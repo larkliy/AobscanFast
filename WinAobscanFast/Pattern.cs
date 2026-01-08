@@ -87,7 +87,7 @@ public readonly struct Pattern
         return (pBytes.Slice(bestStart, bestLength).ToArray(), bestStart);
     }
 
-    [MethodImpl(MethodImplOptions.NoInlining)]
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsMatch(ReadOnlySpan<byte> data)
     {
         nuint length = (nuint)Bytes.Length;
@@ -100,10 +100,10 @@ public readonly struct Pattern
         ref var pData = ref MemoryMarshal.GetReference(data);
 
         nuint i = 0;
+        nuint vecSize = (nuint)Vector<byte>.Count;
 
-        if (Vector.IsHardwareAccelerated && length >= (nuint)Vector<byte>.Count)
+        if (Vector.IsHardwareAccelerated && length >= vecSize)
         {
-            nuint vecSize = (nuint)Vector<byte>.Count;
             nuint lastVecOffset = length - vecSize;
 
             while (i <= lastVecOffset)

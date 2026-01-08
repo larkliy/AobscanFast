@@ -15,7 +15,7 @@ public struct PROCESSENTRY32W
     public uint th32ParentProcessID;
     public int pcPriClassBase;
     public uint dwFlags;
-
+    
     public ExeFileBuffer szExeFile;
 
     [InlineArray(260)]
