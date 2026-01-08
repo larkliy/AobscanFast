@@ -20,6 +20,8 @@
 		<UseSizeOptimizedLinq>false</UseSizeOptimizedLinq>
 		<UseSystemResourceKeys>true</UseSystemResourceKeys>
 		<XmlResolverIsNetworkingEnabledByDefault>false</XmlResolverIsNetworkingEnabledByDefault>
+
+		<IlcInstructionSet>native</IlcInstructionSet>
 	</PropertyGroup>
 
 	<ItemGroup>

@@ -4,13 +4,6 @@ using System.Runtime.CompilerServices;
 
 namespace WinAobscanFast;
 
-/// <summary>
-/// Represents a byte pattern with associated mask information for searching or matching sequences within binary data.
-/// </summary>
-/// <remarks>A Pattern encapsulates both the byte values and mask used to identify concrete and wildcard positions
-/// in a search sequence. It is typically used for efficient pattern matching in binary streams, such as searching for
-/// signatures or markers. Instances are created using the static Create method, which parses a string representation of
-/// the pattern. The struct is immutable and thread-safe.</remarks>
 public readonly struct Pattern
 {
     public readonly byte[] Bytes;
@@ -27,17 +20,6 @@ public readonly struct Pattern
         SearchSequenceOffset = searchSequenceOffset;
     }
 
-    /// <summary>
-    /// Creates a new <see cref="Pattern"/> instance from a string representation of a byte pattern, where hexadecimal
-    /// byte values and wildcard tokens are separated by spaces.
-    /// </summary>
-    /// <remarks>Wildcard tokens ("?" or "??") in the pattern represent bytes that can match any value. At
-    /// least one concrete byte value must be present in the pattern; otherwise, a <see cref="FormatException"/> is
-    /// thrown.</remarks>
-    /// <param name="pattern">A string containing the pattern to parse. Each token should be a hexadecimal byte value (e.g., "FF") or a
-    /// wildcard ("?" or "??"), separated by spaces.</param>
-    /// <returns>A <see cref="Pattern"/> object representing the parsed byte pattern and mask.</returns>
-    /// <exception cref="FormatException">Thrown if the pattern consists only of wildcard tokens and does not contain any concrete byte values.</exception>
     public static Pattern Create(string pattern)
     {
         string[] tokens = pattern.Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -67,26 +49,6 @@ public readonly struct Pattern
         var (bestSeq, offset) = FindLongestSolidRun(pBytes, pMask);
 
         return new Pattern(pBytes, pMask, bestSeq, offset);
-    }
-
-    [Obsolete]
-    private static int FindFirstConcreteByteIndex(string[] tokens, byte[] pBytes, byte[] pMask)
-    {
-        int bestIndex = -1;
-
-        for (int i = 0; i < tokens.Length; i++)
-        {
-            if (pMask[i] == byte.MaxValue && pBytes[i] != byte.MinValue && pBytes[i] != byte.MaxValue)
-            {
-                bestIndex = i;
-                break;
-            }
-        }
-
-        if (bestIndex == -1)
-            bestIndex = pMask.IndexOf(byte.MaxValue);
-
-        return bestIndex;
     }
 
     private static (byte[] BestSequence, int Offset) FindLongestSolidRun(ReadOnlySpan<byte> pBytes, ReadOnlySpan<byte> pMask)
@@ -121,19 +83,9 @@ public readonly struct Pattern
         if (bestLength == 0)
             return ([], -1);
 
-        return (pBytes[bestStart..bestLength].ToArray(), bestStart);
+        return (pBytes.Slice(bestStart, bestLength).ToArray(), bestStart);
     }
 
-    /// <summary>
-    /// Determines whether the specified data matches the pattern defined by the current instance, using the associated
-    /// mask and byte sequence.
-    /// </summary>
-    /// <remarks>This method uses hardware acceleration when available to improve performance for large data
-    /// spans. The comparison applies the mask to each byte before checking for equality with the pattern. If the length
-    /// of pData is less than the pattern length, the method returns false.</remarks>
-    /// <param name="pData">A read-only span of bytes representing the data to compare against the pattern. The span must be at least as
-    /// long as the pattern length.</param>
-    /// <returns>true if the data matches the pattern according to the mask; otherwise, false.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool IsMatch(ReadOnlySpan<byte> pData)
     {

@@ -1,10 +1,9 @@
-﻿using WinAobscanFast.Utils;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
+using System.Buffers;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using WinAobscanFast.Enums;
 using WinAobscanFast.Structs;
-using WinAobscanFast.Extensions;
+using WinAobscanFast.Utils;
 
 namespace WinAobscanFast;
 
@@ -13,78 +12,80 @@ public class AobScan
     private readonly SafeProcessHandle _processHandle;
     private readonly Lock _syncRoot = new();
 
+    private readonly static AobScanOptions s_scanOptionsDefault = new()
+    {
+        MinScanAddress = nint.MinValue,
+        MaxScanAddress = nint.MaxValue,
+        MemoryAccess = MemoryAccess.Readable | MemoryAccess.Writable
+    };
+
     public AobScan(SafeProcessHandle processHandle) => _processHandle = processHandle;
 
-    /// <summary>
-    /// Scans the process memory for occurrences of the specified pattern, filtered by the given memory access
-    /// permissions.
-    /// </summary>
-    /// <remarks>The scan is performed in parallel across all memory regions matching the specified access
-    /// filter. The method throws an <see cref="OperationCanceledException"/> if the operation is canceled via the
-    /// provided cancellation token. This method is thread-safe.</remarks>
-    /// <param name="input">A string representation of the pattern to search for in process memory. The format must be compatible with the
-    /// pattern parser.</param>
-    /// <param name="accessFilter">A bitwise combination of memory access flags that determines which memory regions are included in the scan.</param>
-    /// <param name="ct">A cancellation token that can be used to cancel the scan operation. The default value is <see
-    /// cref="CancellationToken.None"/>.</param>
-    /// <returns>A list of memory addresses where the specified pattern was found. The list is empty if no matches are found.</returns>
-    public unsafe List<nint> Scan(string input, MemoryAccess accessFilter, CancellationToken ct = default)
+    public List<nint> Scan(string input) 
+        => Scan(input, s_scanOptionsDefault);
+
+    public List<nint> Scan(string input, AobScanOptions? scanOptions)
     {
-        ct.ThrowIfCancellationRequested();
+        scanOptions = ValidateScanOptions(scanOptions);
 
         var finalResults = new List<nint>(capacity: 1024);
         var pattern = Pattern.Create(input);
-        var regions = GetRegions(accessFilter, nint.MinValue, nint.MaxValue);
+        var regions = MemoryRegionUtils.GetRegions(_processHandle,
+                                                   scanOptions.MemoryAccess,
+                                                   (nint)scanOptions.MinScanAddress!,
+                                                   (nint)scanOptions.MaxScanAddress!);
 
-        try
-        {
-            Parallel.ForEach(regions, new ParallelOptions
+
+        Parallel.ForEach(regions,
+            () => new List<nint>(),
+
+            (mbi, loopState, threadLocalList) =>
             {
-                MaxDegreeOfParallelism = Environment.ProcessorCount * 2,
-                CancellationToken = ct
-            },
-                () => new List<nint>(),
+                int regionsSize = (int)mbi.RegionSize;
 
-                (mbi, loopState, threadLocalList) =>
-                {
-                    int regionsSize = (int)mbi.RegionSize;
-
-                    if (regionsSize <= 0)
-                        return threadLocalList;
-
-                    void* bufferPtr = NativeMemory.Alloc((nuint)regionsSize);
-                    var buffer = new Span<byte>(bufferPtr, regionsSize);
-
-                    try
-                    {
-                        if (Native.ReadProcessMemory(_processHandle, mbi.BaseAddress, buffer, (nuint)buffer.Length, out nuint bytesRead))
-                        {
-                            ScanRegionForPattern(in mbi, threadLocalList, in pattern, regionsSize, in buffer);
-                        }
-                    }
-                    finally
-                    {
-                        NativeMemory.Free(bufferPtr);
-                    }
-
+                if (regionsSize <= 0)
                     return threadLocalList;
-                },
 
-                localList =>
+                byte[] poolBuffer = ArrayPool<byte>.Shared.Rent((int)mbi.RegionSize);
+                var buffer = poolBuffer.AsSpan(0, (int)mbi.RegionSize);
+
+                try
                 {
-                    lock (_syncRoot)
+                    if (Native.ReadProcessMemory(_processHandle, mbi.BaseAddress, buffer, (nuint)mbi.RegionSize, out nuint bytesRead))
                     {
-                        finalResults.AddRange(localList);
+                        ScanRegionForPattern(in mbi, threadLocalList, in pattern, regionsSize, in buffer);
                     }
-                });
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(poolBuffer);
+                }
 
+                return threadLocalList;
+            },
+
+            localList =>
+            {
+                lock (_syncRoot)
+                {
+                    finalResults.AddRange(localList);
+                }
+            });
 
         return finalResults;
+    }
+
+    private static AobScanOptions ValidateScanOptions(AobScanOptions? scanOptions)
+    {
+        scanOptions ??= s_scanOptionsDefault;
+
+        scanOptions.MinScanAddress ??= s_scanOptionsDefault.MinScanAddress;
+        scanOptions.MaxScanAddress ??= s_scanOptionsDefault.MaxScanAddress;
+
+        if (scanOptions.MemoryAccess == MemoryAccess.None)
+            scanOptions.MemoryAccess = s_scanOptionsDefault.MemoryAccess;
+
+        return scanOptions;
     }
 
     private static void ScanRegionForPattern(
@@ -95,26 +96,24 @@ public class AobScan
         in Span<byte> buffer)
     {
         int seqOffset = pattern.SearchSequenceOffset;
-        ReadOnlySpan<byte> searchSeq = pattern.SearchSequence;
+        var searchSeq = pattern.SearchSequence;
         int patternLength = pattern.Bytes.Length;
 
         int currentOffset = 0;
 
         while (true)
         {
-            ReadOnlySpan<byte> remainingSpan = buffer[currentOffset..];
+            int hitIndex;
 
-            int hitIndex = remainingSpan.IndexOf(searchSeq);
-
-            if (hitIndex == -1)
+            if ((hitIndex = buffer[currentOffset..].IndexOf(searchSeq)) == -1)
                 break;
 
             int foundSeqPos = currentOffset + hitIndex;
             int patternStartPos = foundSeqPos - seqOffset;
 
-            if (patternStartPos >= 0 && patternStartPos + patternLength <= regionsSize)
+            if (IsPatternWithinRegion(patternStartPos, patternLength, regionsSize))
             {
-                ReadOnlySpan<byte> candidateBytes = buffer.Slice(patternStartPos, patternLength);
+                var candidateBytes = buffer.Slice(patternStartPos, patternLength);
 
                 if (pattern.IsMatch(candidateBytes))
                 {
@@ -124,65 +123,8 @@ public class AobScan
 
             currentOffset += hitIndex + 1;
         }
-    }
 
-    /// <summary>
-    /// Asynchronously scans memory for values matching the specified input and access filter.
-    /// </summary>
-    /// <param name="input">The value or pattern to search for in memory.</param>
-    /// <param name="accessFilter">A filter that specifies the type of memory access to include in the scan.</param>
-    /// <param name="ct">A cancellation token that can be used to cancel the scan operation.</param>
-    /// <returns>A task that represents the asynchronous scan operation. The task result contains a list of memory addresses where
-    /// matches were found.</returns>
-    public Task<List<nint>> ScanAsync(string input, MemoryAccess accessFilter, CancellationToken ct = default)
-    {
-        return Task.Run(() => Scan(input, accessFilter, ct), ct);
-    }
-
-    private List<MEMORY_BASIC_INFORMATION> GetRegions(MemoryAccess accessFilter, nint searchStart, nint searchEnd)
-    {
-        nint address = 0;
-        var regions = new List<MEMORY_BASIC_INFORMATION>();
-
-        while (address < searchEnd)
-        {
-            if (Native.VirtualQueryEx(_processHandle, address, out var mbi, Unsafe.SizeOf<MEMORY_BASIC_INFORMATION>()) == 0)
-                break;
-
-            nint regionStart = mbi.BaseAddress;
-            nint regionSize = mbi.RegionSize;
-            nint regionEnd = regionStart + regionSize;
-
-            bool isOverlapping = regionEnd > searchStart && regionStart < searchEnd;
-
-            if (isOverlapping)
-            {
-                bool isValidState = mbi.State == MemoryState.MEM_COMMIT;
-
-                bool isNotGuard = (mbi.Protect & MemoryProtect.PAGE_GUARD) == 0;
-                bool isNotNoAccess = (mbi.Protect & MemoryProtect.PAGE_NOACCESS) == 0;
-
-                if (isValidState && isNotGuard && isNotNoAccess)
-                {
-                    bool meetsFilter = true;
-                    bool isReadable = mbi.IsReadableRegion();
-                    bool isWritable = mbi.IsWritableRegion();
-                    bool isExecutable = mbi.IsExecutableRegion();
-
-                    if (accessFilter.HasFlag(MemoryAccess.Readable) && !isReadable) meetsFilter = false;
-                    if (accessFilter.HasFlag(MemoryAccess.Writable) && !isWritable) meetsFilter = false;
-                    if (accessFilter.HasFlag(MemoryAccess.Executable) && !isExecutable) meetsFilter = false;
-
-                    if (meetsFilter)
-                    {
-                        regions.Add(mbi);
-                    }
-                }
-            }
-
-            address = regionEnd;
-        }
-
-        return regions;
+        static bool IsPatternWithinRegion(int patternStartPos, int patternLength, int regSize)
+            => patternLength >= 0 && patternStartPos + patternLength <= regSize;
     }
 }
