@@ -31,4 +31,8 @@
 		<LinkerArg Include="/DYNAMICBASE:NO" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="Core\Abstractions\" />
+	</ItemGroup>
+
 </Project>

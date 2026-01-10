@@ -3,12 +3,12 @@ using System.Runtime.CompilerServices;
 using WinAobscanFast.Enums;
 using WinAobscanFast.Structs;
 
-namespace WinAobscanFast.Implementations;
+namespace WinAobscanFast.Core.Implementations;
 
 public class WindowsProcessUtils
 {
     public static SafeProcessHandle OpenProcess(uint processId)
-        => WindowsNative.OpenProcess(ProcessAccessFlags.PROCESS_ALL_ACCESS, false, processId);
+        => Native.OpenProcess(ProcessAccessFlags.PROCESS_ALL_ACCESS, false, processId);
 
     [SkipLocalsInit]
     public static uint FindByName(ReadOnlySpan<char> name)
@@ -17,11 +17,11 @@ public class WindowsProcessUtils
 
         var pe32 = new PROCESSENTRY32W { dwSize = (uint)Unsafe.SizeOf<PROCESSENTRY32W>() };
 
-        using var snapshot = WindowsNative.CreateToolhelp32Snapshot(CreateToolhelpSnapshotFlags.TH32CS_SNAPPROCESS, 0);
+        using var snapshot = Native.CreateToolhelp32Snapshot(CreateToolhelpSnapshotFlags.TH32CS_SNAPPROCESS, 0);
         if (snapshot.IsInvalid)
             return 0;
 
-        if (!WindowsNative.Process32FirstW(snapshot, ref pe32)) 
+        if (!Native.Process32FirstW(snapshot, ref pe32)) 
             return 0;
 
         do
@@ -37,7 +37,7 @@ public class WindowsProcessUtils
             if (currentName.Equals(name, StringComparison.OrdinalIgnoreCase))
                 return pe32.th32ProcessID;
 
-        } while (WindowsNative.Process32NextW(snapshot, ref pe32));
+        } while (Native.Process32NextW(snapshot, ref pe32));
 
         return 0;
 

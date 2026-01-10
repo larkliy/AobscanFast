@@ -2,8 +2,9 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
 
-namespace WinAobscanFast;
+namespace WinAobscanFast.Core.Models;
 
 public readonly struct Pattern
 {
@@ -24,9 +25,10 @@ public readonly struct Pattern
     public static Pattern Create(string pattern)
     {
         string[] tokens = pattern.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        int len = tokens.Length;
 
-        byte[] pBytes = new byte[tokens.Length];
-        byte[] pMask = new byte[tokens.Length];
+        byte[] pBytes = GC.AllocateUninitializedArray<byte>(len, pinned: true);
+        byte[] pMask = GC.AllocateUninitializedArray<byte>(len, pinned: true);
 
         for (int i = 0; i < tokens.Length; i++)
         {
@@ -88,42 +90,72 @@ public readonly struct Pattern
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public bool IsMatch(ReadOnlySpan<byte> data)
+    public bool IsMatch(ref Span<byte> data)
     {
         nuint length = (nuint)Bytes.Length;
 
         if ((nuint)data.Length < length)
             return false;
 
-        ref var pBytes = ref MemoryMarshal.GetArrayDataReference(Bytes);
-        ref var pMask = ref MemoryMarshal.GetArrayDataReference(Mask);
-        ref var pData = ref MemoryMarshal.GetReference(data);
+        ref byte pBytes = ref MemoryMarshal.GetArrayDataReference(Bytes);
+        ref byte pMask = ref MemoryMarshal.GetArrayDataReference(Mask);
+        ref byte pData = ref MemoryMarshal.GetReference(data);
 
         nuint i = 0;
-        nuint vecSize = (nuint)Vector<byte>.Count;
 
-        if (Vector.IsHardwareAccelerated && length >= vecSize)
+        if (Vector512.IsHardwareAccelerated && length >= (nuint)Vector512<byte>.Count)
         {
-            nuint lastVecOffset = length - vecSize;
-
-            while (i <= lastVecOffset)
+            nuint limit = length - (nuint)Vector512<byte>.Count;
+            while (i <= limit)
             {
-                var vBytes = Unsafe.ReadUnaligned<Vector<byte>>(ref Unsafe.Add(ref pBytes, i));
-                var vMask = Unsafe.ReadUnaligned<Vector<byte>>(ref Unsafe.Add(ref pMask, i));
-                var vData = Unsafe.ReadUnaligned<Vector<byte>>(ref Unsafe.Add(ref pData, i));
+                var vData = Vector512.LoadUnsafe(ref pData, i);
+                var vMask = Vector512.LoadUnsafe(ref pMask, i);
+                var vBytes = Vector512.LoadUnsafe(ref pBytes, i);
 
-                if (!Vector.EqualsAll(vData & vMask, vBytes))
+                if ((vData & vMask) != vBytes)
                     return false;
 
-                i += vecSize;
+                i += (nuint)Vector512<byte>.Count;
             }
-
         }
 
-        for (; i < length; i++)
+        if (Vector256.IsHardwareAccelerated && (length - i) >= (nuint)Vector256<byte>.Count)
+        {
+            nuint limit = length - (nuint)Vector256<byte>.Count;
+            while (i <= limit)
+            {
+                var vData = Vector256.LoadUnsafe(ref pData, i);
+                var vMask = Vector256.LoadUnsafe(ref pMask, i);
+                var vBytes = Vector256.LoadUnsafe(ref pBytes, i);
+
+                if ((vData & vMask) != vBytes)
+                    return false;
+
+                i += (nuint)Vector256<byte>.Count;
+            }
+        }
+
+        if (Vector128.IsHardwareAccelerated && (length - i) >= (nuint)Vector128<byte>.Count)
+        {
+            nuint limit = length - (nuint)Vector128<byte>.Count;
+            while (i <= limit)
+            {
+                var vData = Vector128.LoadUnsafe(ref pData, i);
+                var vMask = Vector128.LoadUnsafe(ref pMask, i);
+                var vBytes = Vector128.LoadUnsafe(ref pBytes, i);
+
+                if ((vData & vMask) != vBytes)
+                    return false;
+
+                i += (nuint)Vector128<byte>.Count;
+            }
+        }
+
+        while (i < length)
         {
             if ((Unsafe.Add(ref pData, i) & Unsafe.Add(ref pMask, i)) != Unsafe.Add(ref pBytes, i))
                 return false;
+            i++;
         }
 
         return true;

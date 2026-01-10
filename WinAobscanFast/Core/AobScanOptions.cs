@@ -1,6 +1,6 @@
 ﻿using WinAobscanFast.Enums;
 
-namespace WinAobscanFast;
+namespace WinAobscanFast.Core;
 
 public class AobScanOptions
 {

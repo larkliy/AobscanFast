@@ -1,9 +1,9 @@
 ﻿using WinAobscanFast.Structs;
 using static WinAobscanFast.Enums.MemoryProtect;
 
-namespace WinAobscanFast.Extensions;
+namespace WinAobscanFast.Core.Extensions;
 
-public static class RegionExtensions
+public static class WindowsRegionExtensions
 {
     extension(MEMORY_BASIC_INFORMATION mbi)
     {

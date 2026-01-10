@@ -1,4 +1,4 @@
-﻿namespace WinAobscanFast.Structs;
+﻿namespace WinAobscanFast.Core.Models;
 
 public struct MemoryRange(nint baseAddress, nint size)
 {

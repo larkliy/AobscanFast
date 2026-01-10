@@ -1,9 +1,11 @@
 ﻿using System.Buffers;
-using WinAobscanFast.Abstractions;
+using System.Runtime.CompilerServices;
+using WinAobscanFast.Core.Abstractions;
+using WinAobscanFast.Core.Models;
 using WinAobscanFast.Enums;
-using WinAobscanFast.Structs;
+using WinAobscanFast.Utils;
 
-namespace WinAobscanFast;
+namespace WinAobscanFast.Core;
 
 public class AobScan
 {
@@ -19,7 +21,7 @@ public class AobScan
 
     public AobScan(IMemoryReader memoryReader) => _memoryReader = memoryReader;
 
-    public List<nint> Scan(string input) 
+    public List<nint> Scan(string input)
         => Scan(input, s_scanOptionsDefault);
 
     public List<nint> Scan(string input, AobScanOptions? scanOptions)
@@ -28,28 +30,31 @@ public class AobScan
 
         var finalResults = new List<nint>(capacity: 1024);
         var pattern = Pattern.Create(input);
-        var regions = _memoryReader.GetRegions((nint)scanOptions.MinScanAddress!,
-                                               (nint)scanOptions.MaxScanAddress!,
-                                               scanOptions.MemoryAccess);
+        var rawRegions = _memoryReader.GetRegions((nint)scanOptions.MinScanAddress!,
+                                                  (nint)scanOptions.MaxScanAddress!,
+                                                  scanOptions.MemoryAccess);
 
-        Parallel.ForEach(regions,
+        var chunks = RegionChunker.CreateWorkChunks(rawRegions, pattern.Bytes.Length);
+
+        Parallel.ForEach(chunks,
             () => new List<nint>(capacity: 64),
 
-            (regionRange, loopState, threadLocalList) =>
+            (regionChunk, loopState, threadLocalList) =>
             {
-                nint regionsSize = regionRange.Size;
+                int size = (int)regionChunk.Size;
 
-                if (regionsSize <= 0)
+                if (size <= 0)
                     return threadLocalList;
 
-                byte[] poolBuffer = ArrayPool<byte>.Shared.Rent((int)regionsSize);
-                var buffer = poolBuffer.AsSpan(0, (int)regionsSize);
+                byte[] poolBuffer = ArrayPool<byte>.Shared.Rent(size);
+
+                var buffer = poolBuffer.AsSpan(0, size);
 
                 try
                 {
-                    if (_memoryReader.ReadMemory(regionRange.BaseAddress, buffer, out _))
+                    if (_memoryReader.ReadMemory(regionChunk.BaseAddress, buffer, out _))
                     {
-                        ScanRegionForPattern(in regionRange, threadLocalList, in pattern, regionsSize, in buffer);
+                        ScanChunk(in regionChunk, threadLocalList, in pattern, size, in buffer);
                     }
                 }
                 finally
@@ -84,7 +89,8 @@ public class AobScan
         return scanOptions;
     }
 
-    private static void ScanRegionForPattern(
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static void ScanChunk(
         in MemoryRange mbi,
         List<nint> threadLocalList,
         in Pattern pattern,
@@ -94,24 +100,33 @@ public class AobScan
         int seqOffset = pattern.SearchSequenceOffset;
         var searchSeq = pattern.SearchSequence;
         int patternLength = pattern.Bytes.Length;
+        int searchSeqLength = searchSeq.Length;
+
+        int lastValidPatternStart = (int)regionsSize - patternLength;
+
+        int lastValidSeqPos = lastValidPatternStart + seqOffset;
 
         int currentOffset = 0;
 
         while (true)
         {
-            int hitIndex;
+            int remainingLength = lastValidSeqPos - currentOffset + searchSeqLength;
 
-            if ((hitIndex = buffer[currentOffset..].IndexOf(searchSeq)) == -1)
+            if (remainingLength < searchSeqLength)
                 break;
 
+            int hitIndex = buffer.Slice(currentOffset, remainingLength).IndexOf(searchSeq);
+
+            if (hitIndex == -1)
+                break;
             int foundSeqPos = currentOffset + hitIndex;
             int patternStartPos = foundSeqPos - seqOffset;
 
-            if (IsPatternWithinRegion(patternStartPos, patternLength, regionsSize))
+            if (patternStartPos >= 0)
             {
                 var candidateBytes = buffer.Slice(patternStartPos, patternLength);
 
-                if (pattern.IsMatch(candidateBytes))
+                if (pattern.IsMatch(ref candidateBytes))
                 {
                     threadLocalList.Add(mbi.BaseAddress + patternStartPos);
                 }
@@ -119,8 +134,5 @@ public class AobScan
 
             currentOffset += hitIndex + 1;
         }
-
-        static bool IsPatternWithinRegion(int patternStartPos, int patternLength, nint regSize)
-            => patternLength >= 0 && patternStartPos + patternLength <= regSize;
     }
 }

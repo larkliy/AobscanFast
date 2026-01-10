@@ -1,10 +1,10 @@
 ﻿using Microsoft.Win32.SafeHandles;
-using WinAobscanFast.Abstractions;
+using WinAobscanFast.Core.Abstractions;
+using WinAobscanFast.Core.Models;
 using WinAobscanFast.Enums;
-using WinAobscanFast.Structs;
 using WinAobscanFast.Utils;
 
-namespace WinAobscanFast.Implementations;
+namespace WinAobscanFast.Core.Implementations;
 
 public class WindowsMemoryReader : IMemoryReader
 {
@@ -12,14 +12,14 @@ public class WindowsMemoryReader : IMemoryReader
 
     public WindowsMemoryReader(SafeProcessHandle processHandle) => _processHandle = processHandle;
 
-    public IReadOnlyList<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
+    public List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
     {
         return MemoryRegionUtils.GetRegions(_processHandle, access, minAddress, maxAddress);
     }
 
     public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
     {
-        return WindowsNative.ReadProcessMemory(_processHandle, baseAddress, buffer, (nuint)buffer.Length, out bytesRead);
+        return Native.ReadProcessMemory(_processHandle, baseAddress, buffer, (nuint)buffer.Length, out bytesRead);
     }
 
     public void Dispose()
