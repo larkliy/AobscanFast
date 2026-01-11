@@ -24,34 +24,37 @@ public readonly struct Pattern
 
     public static Pattern Create(string pattern)
     {
-        string[] tokens = pattern.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        int len = tokens.Length;
+        Span<byte> pBytes = stackalloc byte[pattern.Length];
+        Span<byte> pMask = stackalloc byte[pattern.Length];
+        int length = 0;
 
-        byte[] pBytes = new byte[64];
-        byte[] pMask = new byte[64];
-
-        for (int i = 0; i < tokens.Length; i++)
+        foreach (var range in pattern.AsSpan().Split(' '))
         {
-            string token = tokens[i];
+            ReadOnlySpan<char> token = pattern[range];
 
-            if (token == "?" || token == "??")
+            if (token[0] == '?')
             {
-                pBytes[i] = byte.MinValue;
-                pMask[i] = byte.MinValue;
+                pBytes[length] = byte.MinValue;
+                pMask[length] = byte.MinValue;
             }
             else
             {
-                pBytes[i] = byte.Parse(token, NumberStyles.HexNumber);
-                pMask[i] = byte.MaxValue;
+                pBytes[length] = HexToByte(token);
+                pMask[length] = byte.MaxValue;
             }
+
+            length++;
         }
 
-        if (!pMask.Any(p => p == byte.MaxValue))
+        ReadOnlySpan<byte> finalBytes = pBytes[..length];
+        ReadOnlySpan<byte> finalMask = pMask[..length];
+
+        if (!finalMask.Contains(byte.MaxValue))
             throw new FormatException("A pattern cannot consist of masks alone.");
 
-        var (bestSeq, offset) = FindLongestSolidRun(pBytes, pMask);
+        var (bestSeq, offset) = FindLongestSolidRun(finalBytes, finalMask);
 
-        return new Pattern(pBytes, pMask, bestSeq, offset);
+        return new Pattern(finalBytes.ToArray(), finalMask.ToArray(), bestSeq, offset);
     }
 
     private static (byte[] BestSequence, int Offset) FindLongestSolidRun(ReadOnlySpan<byte> pBytes, ReadOnlySpan<byte> pMask)
@@ -87,6 +90,16 @@ public readonly struct Pattern
             return ([], -1);
 
         return (pBytes.Slice(bestStart, bestLength).ToArray(), bestStart);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static byte HexToByte(ReadOnlySpan<char> s)
+    {
+        int h = s[0];
+        int l = s[1];
+        h = (h > '9') ? (h & ~0x20) - 'A' + 10 : (h - '0');
+        l = (l > '9') ? (l & ~0x20) - 'A' + 10 : (l - '0');
+        return (byte)((h << 4) | l);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

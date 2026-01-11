@@ -1,5 +1,4 @@
-﻿using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using WinAobscanFast.Core.Models;
 
 namespace WinAobscanFast.Utils;
@@ -14,34 +13,24 @@ public static class RegionChunker
             throw new ArgumentException("Pattern length cannot exceed chunk size");
 
         var result = new List<MemoryRange>(ranges.Count * 5);
-        int overlap = patternLength - 1;
+        nint overlap = patternLength - 1;
 
-        var span = CollectionsMarshal.AsSpan(ranges);
-        ref var rangeRef = ref MemoryMarshal.GetReference(span);
-        nuint len = (nuint)span.Length;
-
-        for (nuint i = 0; i < len; i++)
+        foreach (ref readonly var range in CollectionsMarshal.AsSpan(ranges))
         {
-            ref readonly var range = ref Unsafe.Add(ref rangeRef, i);
-
-            nint currentPtr = range.BaseAddress;
+            nint ptr = range.BaseAddress;
             nint remaining = range.Size;
 
-            while (remaining > 0)
+            while (remaining >= patternLength)
             {
-                nint sizeToRead = remaining > chunkSize ? chunkSize : remaining;
+                nint size = Math.Min(remaining, chunkSize);
 
-                if (sizeToRead < patternLength)
+                result.Add(new(ptr, size));
+
+                if (size == remaining)
                     break;
 
-                result.Add(new MemoryRange(currentPtr, sizeToRead));
-
-                if (sizeToRead == remaining)
-                    break;
-
-                nint step = sizeToRead - overlap;
-
-                currentPtr += step;
+                nint step = size - overlap;
+                ptr += step;
                 remaining -= step;
             }
         }

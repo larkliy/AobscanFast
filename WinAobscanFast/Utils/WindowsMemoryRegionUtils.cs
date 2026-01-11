@@ -53,7 +53,7 @@ public class MemoryRegionUtils
         var result = new List<MemoryRange>(regions.Count);
         var span = CollectionsMarshal.AsSpan(regions);
 
-        ref MemoryRange current = ref span[0];
+        MemoryRange current = span[0];
 
         for (int i = 1; i < span.Length; i++)
         {
@@ -66,6 +66,7 @@ public class MemoryRegionUtils
             else
             {
                 result.Add(current);
+
                 current = next;
             }
         }

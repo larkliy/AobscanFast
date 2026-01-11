@@ -1,4 +1,7 @@
-﻿using Microsoft.Win32.SafeHandles;
+﻿using System.Buffers;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using Microsoft.Win32.SafeHandles;
 using WinAobscanFast.Core.Abstractions;
 using WinAobscanFast.Core.Models;
 using WinAobscanFast.Enums;
