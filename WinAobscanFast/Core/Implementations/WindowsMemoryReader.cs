@@ -1,7 +1,4 @@
-﻿using System.Buffers;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
+﻿using Microsoft.Win32.SafeHandles;
 using WinAobscanFast.Core.Abstractions;
 using WinAobscanFast.Core.Models;
 using WinAobscanFast.Enums;
@@ -17,7 +14,7 @@ public class WindowsMemoryReader : IMemoryReader
 
     public List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
     {
-        return MemoryRegionUtils.GetRegions(_processHandle, access, minAddress, maxAddress);
+        return WindowsMemoryRegionUtils.GetRegions(_processHandle, access, minAddress, maxAddress);
     }
 
     public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)

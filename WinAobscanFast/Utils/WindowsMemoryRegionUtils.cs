@@ -8,7 +8,7 @@ using WinAobscanFast.Structs;
 
 namespace WinAobscanFast.Utils;
 
-public class MemoryRegionUtils
+public class WindowsMemoryRegionUtils
 {
     public static List<MemoryRange> GetRegions(SafeProcessHandle processHandle,
                                                MemoryAccess accessFilter,
