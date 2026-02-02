@@ -57,16 +57,7 @@ Designed to be simple. No complex configuration, just raw speed.
 using WinAobscanFast.Core;
 using WinAobscanFast.Core.Implementations;
 
-// 1. Find the process and get a handle
-var pid = WindowsProcessUtils.FindByName("game_process"); // .exe extension is optional
-using var handle = WindowsProcessUtils.OpenProcess(pid);
-
-// 2. Initialize the scanner
-var scanner = new AobScan(new WindowsMemoryReader(handle));
-
-// 3. Scan! (Supports '??' as wildcards)
-// Example: searching for a pointer or instruction set
-var results = scanner.Scan("48 8B 05 ?? ?? ?? ?? 48 83 C4 28");
+var results = AobScan.ScanProcess("Game Process.exe", "11 11 22 ?? ?? 22");
 
 Console.WriteLine($"Found {results.Count} occurrences.");
 foreach (var addr in results)
@@ -90,7 +81,7 @@ var options = new AobScanOptions
     MaxScanAddress = 0x7FFFFFFFFFF
 };
 
-var results = scanner.Scan("E8 ?? ?? ?? ?? 90", options);
+var results = AobScan.ScanProcess("Game Process.exe", "11 11 22 ?? ?? 22", options);
 ```
 
 ---
