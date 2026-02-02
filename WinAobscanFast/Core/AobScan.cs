@@ -1,6 +1,7 @@
 ﻿using System.Buffers;
 using System.Runtime.CompilerServices;
 using WinAobscanFast.Core.Abstractions;
+using WinAobscanFast.Core.Implementations;
 using WinAobscanFast.Core.Models;
 using WinAobscanFast.Enums;
 using WinAobscanFast.Utils;
@@ -19,7 +20,21 @@ public class AobScan
         MemoryAccess = MemoryAccess.Readable | MemoryAccess.Writable
     };
 
-    public AobScan(IMemoryReader memoryReader) => _memoryReader = memoryReader;
+    private AobScan(IMemoryReader memoryReader) => _memoryReader = memoryReader;
+
+    public static List<nint> ScanProcess(string process, string pattern, AobScanOptions? scanOptions = null)
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            var processId = WindowsProcessUtils.FindByName(process);
+            using var handle = WindowsProcessUtils.OpenProcess(processId);
+
+            var aobscan = new AobScan(new WindowsMemoryReader(handle));
+            return aobscan.Scan(pattern, scanOptions);
+        }
+
+        throw new NotImplementedException();
+    }
 
     public List<nint> Scan(string input)
         => Scan(input, s_scanOptionsDefault);
@@ -103,9 +118,7 @@ public class AobScan
         int searchSeqLength = searchSeq.Length;
 
         int lastValidPatternStart = regionsSize - patternLength;
-
         int lastValidSeqPos = lastValidPatternStart + seqOffset;
-
         int currentOffset = 0;
 
         while (true)
@@ -115,10 +128,11 @@ public class AobScan
             if (remainingLength < searchSeqLength)
                 break;
 
-            int hitIndex = buffer.Slice(currentOffset, remainingLength).IndexOf(searchSeq);
+            int hitIndex;
 
-            if (hitIndex == -1)
+            if ((hitIndex = buffer.Slice(currentOffset, remainingLength).IndexOf(searchSeq)) == -1)
                 break;
+
             int foundSeqPos = currentOffset + hitIndex;
             int patternStartPos = foundSeqPos - seqOffset;
 

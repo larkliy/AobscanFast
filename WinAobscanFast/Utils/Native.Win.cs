@@ -5,7 +5,7 @@ using WinAobscanFast.Structs;
 
 namespace WinAobscanFast;
 
-public partial class Native
+internal partial class Native
 {
     [LibraryImport("kernel32.dll", SetLastError = true)]
     public static partial SafeWaitHandle CreateToolhelp32Snapshot(CreateToolhelpSnapshotFlags dwFlags, uint th32ProcessID);

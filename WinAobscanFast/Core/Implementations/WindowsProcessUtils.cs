@@ -5,7 +5,7 @@ using WinAobscanFast.Structs;
 
 namespace WinAobscanFast.Core.Implementations;
 
-public class WindowsProcessUtils
+internal class WindowsProcessUtils
 {
     public static SafeProcessHandle OpenProcess(uint processId)
         => Native.OpenProcess(ProcessAccessFlags.PROCESS_ALL_ACCESS, false, processId);
@@ -18,6 +18,7 @@ public class WindowsProcessUtils
         var pe32 = new PROCESSENTRY32W { dwSize = (uint)Unsafe.SizeOf<PROCESSENTRY32W>() };
 
         using var snapshot = Native.CreateToolhelp32Snapshot(CreateToolhelpSnapshotFlags.TH32CS_SNAPPROCESS, 0);
+
         if (snapshot.IsInvalid)
             return 0;
 

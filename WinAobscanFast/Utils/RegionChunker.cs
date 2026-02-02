@@ -24,7 +24,7 @@ public static class RegionChunker
             {
                 nint size = Math.Min(remaining, chunkSize);
 
-                result.Add(new(ptr, size));
+                result.Add(new MemoryRange(ptr, size));
 
                 if (size == remaining)
                     break;
