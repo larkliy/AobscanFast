@@ -1,22 +1,20 @@
-﻿using AobscanFast.Enums;
-using AobscanFast.Structs;
-using Microsoft.Win32.SafeHandles;
-using System.Diagnostics;
-using System.IO;
+﻿using AobscanFast.Core.Models;
+using AobscanFast.Enums.Windows;
+using AobscanFast.Structs.Windows;
+using AobscanFast.Utils;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 
-namespace AobscanFast.Core.Implementations;
+namespace AobscanFast.Core.Implementations.Windows;
 
 internal class WindowsProcessUtils
 {
-    public static SafeProcessHandle OpenProcess(uint processId)
+    public static ProcessInfo OpenProcess(uint processId)
     {
-        var handle = Native.OpenProcess(ProcessAccessFlags.PROCESS_ALL_ACCESS, false, processId);
-        if (handle.IsInvalid)
+        var processInfo = Native.OpenProcess(ProcessAccessFlags.PROCESS_ALL_ACCESS, false, processId);
+        if (processInfo == 0 || processInfo == -1)
             throw new InvalidOperationException($"Could not open process with ID {processId}. Process may not exist or access may be denied.");
-
-        return handle;
+        
+        return new(processInfo);
     }
 
     [SkipLocalsInit]

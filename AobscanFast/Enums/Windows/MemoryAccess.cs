@@ -1,4 +1,4 @@
-﻿namespace AobscanFast.Enums;
+﻿namespace AobscanFast.Enums.Windows;
 
 [Flags]
 public enum MemoryAccess

@@ -1,7 +1,7 @@
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace AobscanFast.Structs;
+namespace AobscanFast.Structs.Windows;
 
 [InlineArray(260)]
 public struct szModule

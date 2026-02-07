@@ -1,7 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace AobscanFast.Structs;
+namespace AobscanFast.Structs.Windows;
 
 [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
 public struct PROCESSENTRY32W

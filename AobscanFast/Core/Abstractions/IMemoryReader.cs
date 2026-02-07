@@ -1,5 +1,5 @@
 ﻿using AobscanFast.Core.Models;
-using AobscanFast.Enums;
+using AobscanFast.Enums.Windows;
 
 namespace AobscanFast.Core.Abstractions;
 

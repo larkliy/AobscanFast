@@ -1,9 +1,7 @@
 ﻿using System.Buffers;
 using System.Runtime.CompilerServices;
 using AobscanFast.Core.Abstractions;
-using AobscanFast.Core.Implementations;
 using AobscanFast.Core.Models;
-using AobscanFast.Enums;
 using AobscanFast.Utils;
 
 namespace AobscanFast.Core;
@@ -13,19 +11,12 @@ public class AobScan
     private readonly Lock _syncRoot = new();
     private readonly IMemoryReader _memoryReader;
 
-    private readonly static AobScanOptions s_scanOptionsDefault = new()
-    {
-        MinScanAddress = 0,
-        MaxScanAddress = nint.MaxValue,
-        MemoryAccess = MemoryAccess.Readable | MemoryAccess.Writable
-    };
-
     private AobScan(IMemoryReader memoryReader) => _memoryReader = memoryReader;
 
     public static List<nint> ScanProcess(string process, string pattern, AobScanOptions? scanOptions = null)
     {
-        using var handle = ProcessMemoryFactory.OpenProcessByName(process);
-        var memoryReader = ProcessMemoryFactory.CreateMemoryReader(handle);
+        using var processInfo = ProcessMemoryFactory.OpenProcessByName(process);
+        var memoryReader = ProcessMemoryFactory.CreateMemoryReader(processInfo);
 
         var aobscan = new AobScan(memoryReader);
         return aobscan.Scan(pattern, scanOptions);
@@ -33,67 +24,57 @@ public class AobScan
 
     public static async Task<List<nint>> ScanProcessAsync(string process, string pattern, AobScanOptions? scanOptions = null, CancellationToken cancellationToken = default)
     {
-        using var handle = ProcessMemoryFactory.OpenProcessByName(process);
-        var memoryReader = ProcessMemoryFactory.CreateMemoryReader(handle);
+        using var processInfo = ProcessMemoryFactory.OpenProcessByName(process);
+        var memoryReader = ProcessMemoryFactory.CreateMemoryReader(processInfo);
 
         var aobscan = new AobScan(memoryReader);
         return await aobscan.ScanAsync(pattern, scanOptions, cancellationToken);
     }
 
-    public static List<nint> ScanModule(string process, string module, string pattern, AobScanOptions? scanOptions = null)
+    public static List<nint> ScanModule(string processName, string moduleName, string pattern)
     {
-        uint pid = WindowsProcessUtils.FindByName(process);
-        if (pid == 0) throw new ArgumentException($"Process '{process}' not found.");
+        uint pid = ProcessMemoryFactory.FindProcessIdByName(processName);
+        var moduleInfo = ProcessMemoryFactory.GetModule(pid, moduleName);
+        Console.WriteLine(moduleInfo.Size);
+        var scanOptions = new AobScanOptions(
+            minScanAddress: moduleInfo.BaseAddress,
+            maxScanAddress: (nint?)(moduleInfo.BaseAddress + moduleInfo.Size));
 
-        var (modBase, modSize) = WindowsProcessUtils.GetModule(pid, module);
-
-        scanOptions ??= new AobScanOptions();
-        scanOptions.MinScanAddress = modBase;
-        scanOptions.MaxScanAddress = modBase + (nint)modSize;
-
-        if (scanOptions.MemoryAccess == MemoryAccess.None)
-            scanOptions.MemoryAccess = MemoryAccess.Readable;
-
-        using var handle = WindowsProcessUtils.OpenProcess(pid);
+        using var handle = ProcessMemoryFactory.OpenProcessById(pid);
         var memoryReader = ProcessMemoryFactory.CreateMemoryReader(handle);
 
         var aobscan = new AobScan(memoryReader);
         return aobscan.Scan(pattern, scanOptions);
     }
 
-    public static async Task<List<nint>> ScanModuleAsync(string process, string module, string pattern, AobScanOptions? scanOptions = null, CancellationToken cancellationToken = default)
+    public static async Task<List<nint>> ScanModuleAsync(string processName, string moduleName, string pattern, CancellationToken cancellationToken = default)
     {
-        uint pid = WindowsProcessUtils.FindByName(process);
-        if (pid == 0) throw new ArgumentException($"Process '{process}' not found.");
+        uint pid = ProcessMemoryFactory.FindProcessIdByName(processName);
+        var moduleInfo = ProcessMemoryFactory.GetModule(pid, moduleName);
 
-        var (modBase, modSize) = WindowsProcessUtils.GetModule(pid, module);
+        var scanOptions = new AobScanOptions(
+            minScanAddress: moduleInfo.BaseAddress,
+            maxScanAddress: (nint?)(moduleInfo.BaseAddress + moduleInfo.Size));
 
-        scanOptions ??= new AobScanOptions();
-        scanOptions.MinScanAddress = modBase;
-        scanOptions.MaxScanAddress = modBase + (nint)modSize;
-
-        if (scanOptions.MemoryAccess == MemoryAccess.None)
-            scanOptions.MemoryAccess = MemoryAccess.Readable;
-
-        using var handle = WindowsProcessUtils.OpenProcess(pid);
-        var memoryReader = ProcessMemoryFactory.CreateMemoryReader(handle);
+        using var processInfo = ProcessMemoryFactory.OpenProcessById(pid);
+        var memoryReader = ProcessMemoryFactory.CreateMemoryReader(processInfo);
 
         var aobscan = new AobScan(memoryReader);
         return await aobscan.ScanAsync(pattern, scanOptions, cancellationToken);
     }
 
     public List<nint> Scan(string input)
-        => Scan(input, s_scanOptionsDefault);
+        => Scan(input, null);
 
     public Task<List<nint>> ScanAsync(string input, CancellationToken cancellationToken = default)
-        => ScanAsync(input, s_scanOptionsDefault, cancellationToken);
+        => ScanAsync(input, null, cancellationToken);
 
     public Task<List<nint>> ScanAsync(string input, AobScanOptions? scanOptions, CancellationToken cancellationToken = default) 
         => Task.Run(() => Scan(input, scanOptions, cancellationToken), cancellationToken);
 
     public List<nint> Scan(string input, AobScanOptions? scanOptions, CancellationToken cancellationToken = default)
     {
-        scanOptions = ValidateScanOptions(scanOptions);
+        scanOptions ??= new();
         var finalResults = new List<nint>(capacity: 1024);
         var pattern = Pattern.Create(input);
         var rawRegions = _memoryReader.GetRegions((nint)scanOptions.MinScanAddress!,
@@ -116,9 +97,7 @@ public class AobScan
                 try
                 {
                     if (_memoryReader.ReadMemory(regionChunk.BaseAddress, buffer, out _))
-                    {
                         ScanChunk(in regionChunk, threadLocalList, in pattern, size, in buffer);
-                    }
                 }
                 finally
                 {
@@ -130,25 +109,10 @@ public class AobScan
             localList =>
             {
                 lock (_syncRoot)
-                {
                     finalResults.AddRange(localList);
-                }
             });
 
         return finalResults;
-    }
-
-    private static AobScanOptions ValidateScanOptions(AobScanOptions? scanOptions)
-    {
-        scanOptions ??= s_scanOptionsDefault;
-
-        scanOptions.MinScanAddress ??= s_scanOptionsDefault.MinScanAddress;
-        scanOptions.MaxScanAddress ??= s_scanOptionsDefault.MaxScanAddress;
-
-        if (scanOptions.MemoryAccess == MemoryAccess.None)
-            scanOptions.MemoryAccess = s_scanOptionsDefault.MemoryAccess;
-
-        return scanOptions;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -171,12 +135,10 @@ public class AobScan
         while (true)
         {
             int remainingLength = lastValidSeqPos - currentOffset + searchSeqLength;
-
             if (remainingLength < searchSeqLength)
                 break;
 
             int hitIndex;
-
             if ((hitIndex = buffer.Slice(currentOffset, remainingLength).IndexOf(searchSeq)) == -1)
                 break;
 
@@ -186,11 +148,8 @@ public class AobScan
             if (patternStartPos >= 0)
             {
                 var candidateBytes = buffer.Slice(patternStartPos, patternLength);
-
                 if (pattern.IsMatch(ref candidateBytes))
-                {
                     threadLocalList.Add(mbi.BaseAddress + patternStartPos);
-                }
             }
 
             currentOffset += hitIndex + 1;

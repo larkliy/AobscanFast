@@ -1,68 +1,59 @@
-using Microsoft.Win32.SafeHandles;
 using AobscanFast.Core.Abstractions;
-using AobscanFast.Core.Implementations;
+using AobscanFast.Core.Implementations.Unix;
+using AobscanFast.Core.Implementations.Windows;
+using AobscanFast.Core.Models;
 
 namespace AobscanFast.Core;
 
 public static class ProcessMemoryFactory
 {
-    public static SafeProcessHandle OpenProcessByName(string processName)
+    internal static ProcessInfo OpenProcessByName(string processName)
     {
         if (OperatingSystem.IsWindows())
         {
-            return OpenProcessByNameWindows(processName);
+            var processId = WindowsProcessUtils.FindByName(processName);
+            return WindowsProcessUtils.OpenProcess(processId);
         }
-        else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-        {
-            return OpenProcessByNameUnix(processName);
-        }
-        else
-        {
-            throw new PlatformNotSupportedException($"Process memory operations are not supported on {Environment.OSVersion.Platform}.");
-        }
+       
+        throw new NotImplementedException();
     }
 
-    public static IMemoryReader CreateMemoryReader(SafeProcessHandle processHandle)
+    internal static ProcessInfo OpenProcessById(uint processId)
+    {
+        if (OperatingSystem.IsWindows())
+            return WindowsProcessUtils.OpenProcess(processId);
+
+        throw new NotImplementedException();
+    }
+
+    internal static ModuleInfo GetModule(uint processId, string moduleName)
     {
         if (OperatingSystem.IsWindows())
         {
-            return CreateMemoryReaderWindows(processHandle);
+            var (@base, size) = WindowsProcessUtils.GetModule(processId, moduleName);
+            return new(@base, size);
         }
+        
+        throw new NotImplementedException();
+    }
+
+    internal static uint FindProcessIdByName(string processName)
+    {
+        if (OperatingSystem.IsWindows())
+            return WindowsProcessUtils.FindByName(processName);
         else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
-        {
-            return CreateMemoryReaderUnix(processHandle);
-        }
-        else
-        {
-            throw new PlatformNotSupportedException($"Memory reading is not supported on {Environment.OSVersion.Platform}.");
-        }
+            return UnixProcessUtils.FindByName(processName);
+
+        throw new NotImplementedException();
     }
 
-    private static SafeProcessHandle OpenProcessByNameWindows(string processName)
+    internal static IMemoryReader CreateMemoryReader(ProcessInfo processInfo)
     {
-        var processId = WindowsProcessUtils.FindByName(processName);
-        if (processId == 0)
-        {
-            throw new InvalidOperationException($"Process '{processName}' was not found.");
-        }
+        if (OperatingSystem.IsWindows())
+            return new WindowsMemoryReader(processInfo);
+        else if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            return new UnixMemoryReader(processInfo);
 
-        return WindowsProcessUtils.OpenProcess(processId);
-    }
-
-    private static SafeProcessHandle OpenProcessByNameUnix(string processName)
-    {
-        // TODO: Implement Unix-specific process opening
-        throw new NotImplementedException("Unix process operations are not yet implemented.");
-    }
-
-    private static IMemoryReader CreateMemoryReaderWindows(SafeProcessHandle processHandle)
-    {
-        return new WindowsMemoryReader(processHandle);
-    }
-
-    private static IMemoryReader CreateMemoryReaderUnix(SafeProcessHandle processHandle)
-    {
-        // TODO: Implement Unix memory reader
-        throw new NotImplementedException("Unix memory reading is not yet implemented.");
+        throw new NotImplementedException();
     }
 }

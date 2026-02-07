@@ -1,9 +1,9 @@
-﻿using AobscanFast.Structs;
-using static AobscanFast.Enums.MemoryProtect;
+﻿using AobscanFast.Structs.Windows;
+using static AobscanFast.Enums.Windows.MemoryProtect;
 
 namespace AobscanFast.Core.Extensions;
 
-public static class WindowsRegionExtensions
+internal static class WindowsRegionExtensions
 {
     extension(MEMORY_BASIC_INFORMATION mbi)
     {
