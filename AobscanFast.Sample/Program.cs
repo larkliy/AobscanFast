@@ -1,10 +1,27 @@
-using AobscanFast.Core;
+Ôªøusing AobscanFast.Infrastructure.Windows;
+using AobscanFast.Services;
 
 Console.OutputEncoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
 
-var results = AobScan.ScanModule("Godot_v4.6-stable_mono_win64.exe", "GodotSharp.dll", "FF");
+var handler = new WinProcessHandler();
 
-Console.WriteLine($"–ÂÁÛÎ¸Ú‡ÚÓ‚: {results.Count}");
+var processId = handler.FindIdByName("notepad");
+
+if (processId == null)
+{
+    Console.WriteLine($"Process ID is not found.");
+    return;
+}
+
+using var handle = handler.OpenProcess(processId.Value);
+
+var reader = new WinMemoryReader(handle);
+
+var aobscanner = new AobScanner(reader);
+
+var results = aobscanner.Scan("02 00 00 00 02 00 00 00 20 15");
+
+Console.WriteLine($"–†–µ–∑—É–ª—å—Ç–∞—Ç–æ–≤: {results.Count}");
 
 foreach (nint result in results.Take(10))
 {

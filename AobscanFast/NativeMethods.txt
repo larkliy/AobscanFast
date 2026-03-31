@@ -1,0 +1,8 @@
+OpenProcess
+CloseHandle
+ReadProcessMemory
+
+VirtualQueryEx
+
+CreateToolhelp32Snapshot
+Process32FirstW
