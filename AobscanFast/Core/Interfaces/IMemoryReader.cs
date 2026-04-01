@@ -1,7 +1,6 @@
 ﻿using AobscanFast.Core.Models;
-using AobscanFast.Infrastructure;
 
-namespace AobscanFast.Abstractions;
+namespace AobscanFast.Core.Interfaces;
 
 public interface IMemoryReader
 {

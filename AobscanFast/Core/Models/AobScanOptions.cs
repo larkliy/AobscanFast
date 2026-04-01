@@ -1,6 +1,4 @@
-﻿using AobscanFast.Infrastructure;
-
-namespace AobscanFast.Abstractions;
+﻿namespace AobscanFast.Core.Models;
 
 public class AobScanOptions
 {

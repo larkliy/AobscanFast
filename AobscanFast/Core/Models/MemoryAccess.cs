@@ -1,4 +1,4 @@
-﻿namespace AobscanFast.Infrastructure;
+﻿namespace AobscanFast.Core.Models;
 
 [Flags]
 public enum MemoryAccess

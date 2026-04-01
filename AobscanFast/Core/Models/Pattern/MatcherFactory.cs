@@ -1,4 +1,4 @@
-﻿using AobscanFast.Abstractions;
+﻿using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Matching;
 
 namespace AobscanFast.Core.Models.Pattern;

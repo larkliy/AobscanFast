@@ -1,5 +1,4 @@
 ﻿using AobscanFast.Services;
-using AobscanFast.Abstractions;
 using AobscanFast.Extensions;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
@@ -9,6 +8,7 @@ using Windows.Win32.System.Memory;
 using static Windows.Win32.System.Memory.VIRTUAL_ALLOCATION_TYPE;
 using static Windows.Win32.System.Memory.PAGE_PROTECTION_FLAGS;
 using AobscanFast.Core.Models;
+using AobscanFast.Core.Interfaces;
 
 namespace AobscanFast.Infrastructure.Windows;
 

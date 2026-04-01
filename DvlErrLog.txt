@@ -1,3 +1,0 @@
-System.Exception: Driver Verification Log needs to be created on a 'Release' configuration. The current selected configuration is ''.
-   в Microsoft.SdvMenuCommand.DriverVerificationLicense..ctor()
-   в Microsoft.SdvMenuCommand.SdvMenuCommandPackage.StaticToolsLogoMenuItemCallback(Object sender, EventArgs e)

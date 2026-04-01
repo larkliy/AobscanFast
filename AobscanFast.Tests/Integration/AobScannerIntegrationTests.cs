@@ -1,6 +1,5 @@
-﻿using AobscanFast.Abstractions;
+﻿using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models;
-using AobscanFast.Infrastructure;
 using AobscanFast.Services;
 using NSubstitute;
 

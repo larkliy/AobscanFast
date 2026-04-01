@@ -1,4 +1,4 @@
-﻿using AobscanFast.Abstractions;
+﻿using AobscanFast.Core.Interfaces;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Windows.Win32;

@@ -1,7 +1,6 @@
-﻿
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 
-namespace AobscanFast.Abstractions;
+namespace AobscanFast.Core.Interfaces;
 
 public interface IProcessHandler
 {

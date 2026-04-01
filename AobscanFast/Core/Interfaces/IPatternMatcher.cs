@@ -1,7 +1,7 @@
 ﻿using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
 
-namespace AobscanFast.Abstractions;
+namespace AobscanFast.Core.Interfaces;
 
 internal interface IPatternMatcher
 {
