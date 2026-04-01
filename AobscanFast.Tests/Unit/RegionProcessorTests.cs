@@ -1,5 +1,5 @@
-﻿using AobscanFast.Core.Models;
-using AobscanFast.Services;
+﻿using AobscanFast.Core.Helpers;
+using AobscanFast.Core.Models;
 
 namespace AobscanFast.Tests.Unit;
 

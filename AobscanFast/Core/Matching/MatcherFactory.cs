@@ -1,7 +1,7 @@
 ﻿using AobscanFast.Core.Interfaces;
-using AobscanFast.Core.Matching;
+using AobscanFast.Core.Models.Pattern;
 
-namespace AobscanFast.Core.Models.Pattern;
+namespace AobscanFast.Core.Matching;
 
 internal static class MatcherFactory
 {

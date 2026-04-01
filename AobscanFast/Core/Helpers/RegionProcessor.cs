@@ -1,7 +1,7 @@
 ﻿using AobscanFast.Core.Models;
 using System.Runtime.InteropServices;
 
-namespace AobscanFast.Services;
+namespace AobscanFast.Core.Helpers;
 
 public static class RegionProcessor
 {
@@ -54,7 +54,7 @@ public static class RegionProcessor
 
             if (current.BaseAddress + current.Size == next.BaseAddress)
             {
-                current.Size += next.Size;
+                current = new MemoryRange(current.BaseAddress, current.Size + next.Size);
             }
             else
             {

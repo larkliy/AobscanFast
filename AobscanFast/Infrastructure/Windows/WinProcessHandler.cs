@@ -1,7 +1,7 @@
-﻿using AobscanFast.Core.Interfaces;
+﻿using Windows.Win32;
 using System.Diagnostics;
+using AobscanFast.Core.Interfaces;
 using System.Runtime.InteropServices;
-using Windows.Win32;
 using Windows.Win32.System.Threading;
 
 namespace AobscanFast.Infrastructure.Windows;

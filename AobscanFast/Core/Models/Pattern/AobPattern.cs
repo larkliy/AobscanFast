@@ -19,8 +19,6 @@ public sealed class AobPattern
         byte[] pooledBytes = ArrayPool<byte>.Shared.Rent(input.Length);
         byte[] pooledMask = ArrayPool<byte>.Shared.Rent(input.Length);
 
-        var pattern = new AobPattern();
-
         byte[] bytes = null!;
         byte[] mask = null!;
         byte[] searchSequence = null!;

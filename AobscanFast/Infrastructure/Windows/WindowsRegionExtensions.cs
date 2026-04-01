@@ -2,7 +2,7 @@
 
 using static Windows.Win32.System.Memory.PAGE_PROTECTION_FLAGS;
 
-namespace AobscanFast.Extensions;
+namespace AobscanFast.Infrastructure.Windows;
 
 internal static class WindowsRegionExtensions
 {

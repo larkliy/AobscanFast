@@ -1,4 +1,7 @@
 <Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+  </Folder>
   <Project Path="AobscanFast.Sample/AobscanFast.Sample.csproj" Id="ae717ee4-df70-4905-a3b4-95d0641aa335">
     <Build Solution="Debug|*" Project="false" />
   </Project>

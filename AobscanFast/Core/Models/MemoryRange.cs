@@ -1,7 +1,3 @@
 ﻿namespace AobscanFast.Core.Models;
 
-public struct MemoryRange(nint baseAddress, nint size)
-{
-    public nint BaseAddress = baseAddress;
-    public nint Size = size;
-}
+public readonly record struct MemoryRange(nint BaseAddress, nint Size);

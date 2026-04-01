@@ -1,4 +1,5 @@
-﻿using AobscanFast.Core.Interfaces;
+﻿using AobscanFast.Core.Helpers;
+using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Matching;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
