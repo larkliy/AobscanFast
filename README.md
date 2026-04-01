@@ -5,43 +5,42 @@
   <h1>⚡ AobscanFast</h1>
   
   <p>
-    <b>Blazing fast memory scanning (AOB) powered by SIMD & Parallelism.</b>
+    <b>Blazing fast memory scanning (AOB) meets Clean Architecture.</b>
     <br>
-    Written in modern C# for those who care about performance.
+    A modular, SIMD-accelerated memory scanner written in modern C# for high-performance applications.
   </p>
 
   <!-- Badges -->
   <a href="#">
-    <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet" alt=".NET Version" />
+    <img src="https://img.shields.io/badge/.NET-9.0%2B-512BD4?style=flat-square&logo=dotnet" alt=".NET Version" />
   </a>
   <a href="#">
     <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat-square&logo=windows" alt="Platform" />
   </a>
   <a href="#">
-    <img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" alt="License" />
+    <img src="https://img.shields.io/badge/Architecture-Clean-green?style=flat-square" alt="Architecture" />
   </a>
   <a href="#">
-    <img src="https://img.shields.io/badge/SIMD-AVX%20%7C%20AVX512-red?style=flat-square" alt="SIMD" />
+    <img src="https://img.shields.io/badge/SIMD-AVX512%20%7C%20AVX2-red?style=flat-square" alt="SIMD" />
   </a>
 
 </div>
 
 <br>
 
-## 🚀 Why this project?
+## 🚀 Overview
 
-Need to find a byte pattern in another process, but standard solutions are too slow or outdated? **AobscanFast** leverages modern hardware to get the job done instantly.
+**AobscanFast** is not just another memory scanner. It is a highly optimized, thread-safe library designed for developers who need extreme performance without sacrificing code quality.
 
-*   💎 **Hardware Intrinsics:** Built with `Vector512`, `Vector256`, and `Vector128`. If your CPU supports AVX-512, this scanner **flies**.
-*   🧵 **Parallel Processing:** Memory is chunked and scanned concurrently across all available CPU threads.
-*   🧠 **Smart Memory Mapping:** Automatically maps regions via `VirtualQueryEx`, skips `PAGE_GUARD`/`NOACCESS`, and merges adjacent regions to minimize syscalls.
-*   🩸 **Modern C#:** Uses `Span<T>`, `LibraryImport`, `ArrayPool`, and zero-allocation techniques where possible.
+*   💎 **Hardware Intrinsics:** Optimized for `Vector512`, `Vector256`, and `Vector128`. It dynamically chooses the fastest matching engine based on your CPU.
+*   🏗️ **Clean Architecture:** Fully decoupled layers (Abstractions, Services, Infrastructure). No more static spaghetti code.
+*   🧵 **True Parallelism:** Concurrent scanning using `Parallel.ForEach` with optimized memory chunking.
+*   🔒 **Safe Handles:** Built with `SafeHandle` and `CsWin32` source generators to ensure zero handle leaks and memory safety.
+*   🛠️ **DI Ready:** Designed to work seamlessly with Dependency Injection containers.
 
 ---
 
 ## 📦 Installation
-
-Just clone the repository and drop the project into your solution.
 
 ```bash
 git clone https://github.com/larkliy/AobscanFast.git
@@ -49,94 +48,83 @@ git clone https://github.com/larkliy/AobscanFast.git
 
 ## 🔥 Usage
 
-Designed to be simple. No complex configuration, just raw speed.
+The new modular API separates process management from scanning logic.
 
-### 1. Simple Pattern Scan
+### 1. Basic Pattern Scan (Direct usage)
 
 ```csharp
-using AobscanFast.Core;
-using AobscanFast.Core.Implementations;
+using AobscanFast.Infrastructure.Windows;
+using AobscanFast.Services;
 
-var results = AobScan.ScanProcess("Game Process.exe", "11 11 22 ?? ?? 22");
+// 1. Initialize infrastructure
+var handler = new WinProcessHandler();
+uint? pid = handler.FindIdByName("notepad");
 
-Console.WriteLine($"Found {results.Count} occurrences.");
-foreach (var addr in results)
+// 2. Open process safely
+using var handle = handler.OpenProcess(pid.Value);
+
+// 3. Scan memory
+var reader = new WinMemoryReader(handle);
+var scanner = new AobScanner(reader);
+
+var results = scanner.Scan("48 8B ?? ?? ?? AA");
+```
+
+### 2. Module-Specific Scan
+
+Limit the scan range to a specific DLL to drastically increase performance.
+
+```csharp
+var module = handler.GetModuleInfo(pid.Value, "GameAssembly.dll");
+
+if (module != null)
 {
-    Console.WriteLine($"Address: 0x{addr:X}");
+    var options = new AobScanOptions 
+    { 
+        MinScanAddress = module.Value.BaseAddress,
+        MaxScanAddress = module.Value.BaseAddress + (nint)module.Value.Size
+    };
+    
+    var results = scanner.Scan("F3 0F 10 ?? ?? ??", options);
 }
 ```
 
-### 2. Module-Specific Scanning
+---
 
-Scan for patterns within a specific module of a process using `ScanModule` or `ScanModuleAsync`.
+## 🏗 Architecture
 
-```csharp
-// Synchronous scanning of a specific module
-var results = AobScan.ScanModule("Game Process.exe", "GameAssembly.dll", "11 11 22 ?? ?? 22");
+The project follows **SOLID** principles to remain maintainable and extensible:
 
-// Asynchronous scanning of a specific module
-var results = await AobScan.ScanModuleAsync("Game Process.exe", "GameAssembly.dll", "11 11 22 ?? ?? 22");
-```
-
-### 3. Advanced Options
-
-Need to scan only **Executable** memory (e.g., finding functions) or limit the address range?
-
-```csharp
-var options = new AobScanOptions
-{
-    // Filter regions: Only scan Executable + Readable memory
-    MemoryAccess = MemoryAccess.Executable | MemoryAccess.Readable,
-
-    // Optional: Restrict scan range
-    MinScanAddress = 0x7FF00000000,
-    MaxScanAddress = 0x7FFFFFFFFFF
-};
-
-var results = AobScan.ScanProcess("Game Process.exe", "11 11 22 ?? ?? 22", options);
-```
+- **Abstractions:** Interfaces like `IMemoryReader` and `IProcessHandler`.
+- **Services:** Core logic, including `AobScanner` and SIMD `PatternMatchers`.
+- **Infrastructure:** Platform-specific implementations (currently Windows via `CsWin32`).
+- **Models:** Value types like `MemoryRange` and `AobPattern`.
 
 ---
 
-## 🛠 Under the Hood
+## 🛠 Performance Tech
 
-How do we achieve this performance?
-
-1.  **Memory Mapping:** We don't read the entire RAM blindly. We query the memory map (`VirtualQueryEx`) to identify valid committed pages.
-2.  **Chunking:** Valid regions are sliced into optimized chunks (default 256KB) for parallel processing.
-3.  **SIMD:** The `IsMatch` method uses specific hardware instructions:
-    ```csharp
-    // Simplified logic
-    if (Vector512.IsHardwareAccelerated) {
-        // Compare 64 bytes in a single CPU cycle!
-    }
-    ```
-
----
-
-## 📊 Performance
-
-*On a modern CPU (e.g., i3-10100F), scanning 5.6GB of process memory typically takes 700-800 milliseconds, depending on pattern complexity and hit count.*
+1.  **Smart Chunking:** Adjacent memory regions are merged and then sliced into optimal chunks (256KB) to maximize cache hits and parallel efficiency.
+2.  **Zero-Allocation Paths:** Heavy use of `Span<T>`, `ReadOnlySpan<T>`, and `ArrayPool<byte>` to minimize GC pressure.
+3.  **Strategy Pattern:** Automatically switches between `SolidMatcher` (direct `IndexOf`) and `MaskMatcher` (SIMD masked comparison) based on your pattern.
 
 ---
 
 ## 🤝 Contributing
 
-Found a way to make it even faster? Found a bug?
-**Pull Requests** and **Issues** are welcome!
+Contributions are welcome! Whether it's porting to **Linux** (via `/proc/pid/maps`) or optimizing SIMD routines further.
 
-1.  Fork it!
-2.  Create your feature branch: `git checkout -b my-new-feature`
-3.  Commit your changes: `git commit -am 'Add some feature'`
-4.  Push to the branch: `git push origin my-new-feature`
-5.  Submit a pull request
+1.  Fork the repo
+2.  Create your branch: `git checkout -b feature/cool-optimization`
+3.  Commit your changes
+4.  Push to the branch and open a Pull Request
 
 ## ⭐ Support
 
-If you found this project useful or interesting, please **give it a Star**! 🌟
-It helps others find the project and motivates me to improve it.
+If you like this project, please **give it a Star**! 🌟 It helps me stay motivated and improve the library.
 
 ---
 <div align="center">
-  <i>Made with ❤️ and C#</i>
+  <i>Engineered for speed, architected for humans.</i>
 </div>
+```
