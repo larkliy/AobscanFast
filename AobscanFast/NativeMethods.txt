@@ -5,4 +5,9 @@ ReadProcessMemory
 VirtualQueryEx
 
 CreateToolhelp32Snapshot
+
 Process32FirstW
+Process32NextW
+
+Module32FirstW
+Module32NextW

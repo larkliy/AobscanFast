@@ -5,9 +5,9 @@ namespace AobscanFast.Core.Matching;
 
 internal static class MatcherFactory
 {
-    private static readonly SolidMatcher _solid = new();
-    private static readonly MaskMatcher _mask = new();
+    private static readonly SolidMatcher s_solid = new();
+    private static readonly MaskMatcher s_mask = new();
 
     public static IPatternMatcher GetMatcher(AobPattern pattern)
-        => pattern.HasMask ? _mask : _solid;
+        => pattern.HasMask ? s_mask : s_solid;
 }
