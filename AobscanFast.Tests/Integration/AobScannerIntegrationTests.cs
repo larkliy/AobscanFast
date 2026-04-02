@@ -8,13 +8,14 @@ namespace AobscanFast.Tests.Integration
     public class AobScannerIntegrationTests
     {
         private readonly IMemoryReader _reader = Substitute.For<IMemoryReader>();
+        private readonly IProcessHandler _handler = Substitute.For<IProcessHandler>();
 
         [Fact]
         public void Scan_NoRegions_ReturnsEmpty()
         {
             _reader.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([]);
 
-            var scanner = new AobScanner(_reader);
+            var scanner = new AobScanner(_handler, _reader);
             var results = scanner.Scan("AA BB CC");
 
             Assert.Empty(results);
@@ -28,7 +29,7 @@ namespace AobscanFast.Tests.Integration
             using var cts = new CancellationTokenSource();
             cts.Cancel();
 
-            var scanner = new AobScanner(_reader);
+            var scanner = new AobScanner(_handler, _reader);
 
             Assert.Throws<OperationCanceledException>(() => scanner.Scan("AA BB", ct: cts.Token));
         }

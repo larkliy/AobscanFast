@@ -1,6 +1,7 @@
 ﻿using AobscanFast.Core.Matching;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
+using AobscanFast.Core.Parsing;
 
 namespace AobscanFast.Tests.Unit;
 
@@ -8,10 +9,16 @@ public class SolidMatcherTests
 {
     private readonly SolidMatcher _matcher = new();
 
+    private static AobPattern ParsePattern(string input)
+    {
+        var parser = ParserFactory.GetParser(input);
+        return parser.Parse(input);
+    }
+
     [Fact]
     public void ScanChunk_PatternAtStart_Found()
     {
-        var pattern = AobPattern.Parse("AA BB CC");
+        var pattern = ParsePattern("AA BB CC");
         var buffer = new byte[] { 0xAA, 0xBB, 0xCC, 0x00, 0x00 };
         var range = new MemoryRange(0x1000, buffer.Length);
         var results = new List<nint>();
@@ -25,7 +32,7 @@ public class SolidMatcherTests
     [Fact]
     public void ScanChunk_PatternInMiddle_Found()
     {
-        var pattern = AobPattern.Parse("BB CC");
+        var pattern = ParsePattern("BB CC");
         var buffer = new byte[] { 0x00, 0xBB, 0xCC, 0x00 };
         var range = new MemoryRange(0x2000, buffer.Length);
         var results = new List<nint>();
@@ -39,7 +46,7 @@ public class SolidMatcherTests
     [Fact]
     public void ScanChunk_PatternAtEnd_Found()
     {
-        var pattern = AobPattern.Parse("CC DD");
+        var pattern = ParsePattern("CC DD");
         var buffer = new byte[] { 0x00, 0x00, 0xCC, 0xDD };
         var range = new MemoryRange(0x3000, buffer.Length);
         var results = new List<nint>();
@@ -53,7 +60,7 @@ public class SolidMatcherTests
     [Fact]
     public void ScanChunk_NoMatch_Empty()
     {
-        var pattern = AobPattern.Parse("FF EE");
+        var pattern = ParsePattern("FF EE");
         var buffer = new byte[] { 0x00, 0x01, 0x02, 0x03 };
         var range = new MemoryRange(0x1000, buffer.Length);
         var results = new List<nint>();
@@ -66,7 +73,7 @@ public class SolidMatcherTests
     [Fact]
     public void ScanChunk_MultipleMatches_AllFound()
     {
-        var pattern = AobPattern.Parse("AA BB");
+        var pattern = ParsePattern("AA BB");
         var buffer = new byte[] { 0xAA, 0xBB, 0x00, 0xAA, 0xBB };
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();
@@ -81,7 +88,7 @@ public class SolidMatcherTests
     [Fact]
     public void ScanChunk_OverlappingMatches_AllFound()
     {
-        var pattern = AobPattern.Parse("AA AA");
+        var pattern = ParsePattern("AA AA");
         var buffer = new byte[] { 0xAA, 0xAA, 0xAA };
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();

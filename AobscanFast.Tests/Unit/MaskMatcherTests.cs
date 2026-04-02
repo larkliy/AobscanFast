@@ -1,6 +1,7 @@
 ﻿using AobscanFast.Core.Matching;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
+using AobscanFast.Core.Parsing;
 
 namespace AobscanFast.Tests.Unit;
 
@@ -8,10 +9,17 @@ public class MaskMatcherTests
 {
     private readonly MaskMatcher _matcher = new();
 
+
+    private static AobPattern ParsePattern(string input)
+    {
+        var parser = ParserFactory.GetParser(input);
+        return parser.Parse(input);
+    }
+
     [Fact]
     public void ScanChunk_WildcardMiddle_Matches()
     {
-        var pattern = AobPattern.Parse("AA ?? CC");
+        var pattern = ParsePattern("AA ?? CC");
         var buffer = new byte[] { 0xAA, 0x42, 0xCC, 0x00 };
         var range = new MemoryRange(0x1000, buffer.Length);
         var results = new List<nint>();
@@ -25,7 +33,7 @@ public class MaskMatcherTests
     [Fact]
     public void ScanChunk_WildcardStart_Matches()
     {
-        var pattern = AobPattern.Parse("?? BB CC");
+        var pattern = ParsePattern("?? BB CC");
         var buffer = new byte[] { 0xFF, 0xBB, 0xCC };
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();
@@ -39,7 +47,7 @@ public class MaskMatcherTests
     [Fact]
     public void ScanChunk_WildcardEnd_Matches()
     {
-        var pattern = AobPattern.Parse("AA BB ??");
+        var pattern = ParsePattern("AA BB ??");
         var buffer = new byte[] { 0xAA, 0xBB, 0x99 };
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();
@@ -52,7 +60,7 @@ public class MaskMatcherTests
     [Fact]
     public void ScanChunk_NoMatch_Empty()
     {
-        var pattern = AobPattern.Parse("AA ?? DD");
+        var pattern = ParsePattern("AA ?? DD");
         var buffer = new byte[] { 0xAA, 0x42, 0xCC }; // last byte CC != DD
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();
@@ -65,7 +73,7 @@ public class MaskMatcherTests
     [Fact]
     public void ScanChunk_MultipleWildcardMatches()
     {
-        var pattern = AobPattern.Parse("AA ?? CC");
+        var pattern = ParsePattern("AA ?? CC");
         var buffer = new byte[] { 0xAA, 0x11, 0xCC, 0x00, 0xAA, 0x22, 0xCC };
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();
@@ -80,7 +88,7 @@ public class MaskMatcherTests
     [Fact]
     public void ScanChunk_MultipleConsecutiveWildcards()
     {
-        var pattern = AobPattern.Parse("AA ?? ?? DD");
+        var pattern = ParsePattern("AA ?? ?? DD");
         var buffer = new byte[] { 0xAA, 0x00, 0x00, 0xDD };
         var range = new MemoryRange(0x0, buffer.Length);
         var results = new List<nint>();
@@ -93,7 +101,7 @@ public class MaskMatcherTests
     [Fact]
     public void ScanChunk_WildcardMatchesAnyByte()
     {
-        var pattern = AobPattern.Parse("AA ?? CC");
+        var pattern = ParsePattern("AA ?? CC");
         var range = new MemoryRange(0x0, 3);
         var results = new List<nint>();
 

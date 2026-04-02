@@ -3,6 +3,7 @@ using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Matching;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
+using AobscanFast.Core.Parsing;
 using System.Buffers;
 
 namespace AobscanFast.Services;
@@ -11,7 +12,23 @@ public class AobScanner(IProcessHandler processHandler, IMemoryReader memoryRead
 {
     private readonly Lock _syncRoot = new();
 
-    public List<nint> ScanModule(uint processId, string moduleName, string pattern, CancellationToken ct = default)
+    public List<nint> Scan(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
+    {
+        var parser = ParserFactory.GetParser(patternInput);
+        var pattern = parser.Parse(patternInput);
+
+        return Scan(pattern, options, ct);
+    }
+
+    public List<nint> ScanModule(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
+    {
+        var parser = ParserFactory.GetParser(patternInput);
+        var pattern = parser.Parse(patternInput);
+
+        return ScanModule(processId, moduleName, pattern, ct);
+    }
+
+    public List<nint> ScanModule(uint processId, string moduleName, AobPattern pattern, CancellationToken ct = default)
     {
         var modInfo = processHandler.GetModuleInfo(processId, moduleName);
 
@@ -27,11 +44,10 @@ public class AobScanner(IProcessHandler processHandler, IMemoryReader memoryRead
         return Scan(pattern, options, ct);
     }
 
-    public List<nint> Scan(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
+    public List<nint> Scan(AobPattern pattern, AobScanOptions? options = null, CancellationToken ct = default)
     {
         options ??= new();
 
-        var pattern = AobPattern.Parse(patternInput);
         var matcher = MatcherFactory.GetMatcher(pattern);
 
         var rawRegions = memoryReader.GetRegions(
@@ -44,7 +60,7 @@ public class AobScanner(IProcessHandler processHandler, IMemoryReader memoryRead
 
         var finalResults = new List<nint>(1024);
 
-        Parallel.ForEach(chunks, 
+        Parallel.ForEach(chunks,
 
             new ParallelOptions { CancellationToken = ct },
             () => new List<nint>(64),
@@ -70,7 +86,7 @@ public class AobScanner(IProcessHandler processHandler, IMemoryReader memoryRead
             },
             localList =>
             {
-                lock (_syncRoot) 
+                lock (_syncRoot)
                     finalResults.AddRange(localList);
             });
 
