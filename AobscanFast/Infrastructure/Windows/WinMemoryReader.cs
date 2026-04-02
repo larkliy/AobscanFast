@@ -16,7 +16,6 @@ public unsafe class WinMemoryReader(SafeHandle processHandle) : IMemoryReader
     {
         nint currentAddress = minAddress;
         var regions = new List<MemoryRange>(256);
-        nint mbiSize = Unsafe.SizeOf<MEMORY_BASIC_INFORMATION>();
 
         while (currentAddress < maxAddress)
         {

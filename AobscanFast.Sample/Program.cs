@@ -2,8 +2,8 @@
 using AobscanFast.Services;
 using System.Diagnostics;
 
-var handler = new WinProcessHandler();
-var processId = handler.FindIdByName("HD-Player");
+var processHandler = new WinProcessHandler();
+var processId = processHandler.FindIdByName("HD-Player");
 
 if (processId == null)
 {
@@ -11,9 +11,9 @@ if (processId == null)
     return;
 }
 
-using var handle = handler.OpenProcess(processId.Value);
+using var handle = processHandler.OpenProcess(processId.Value);
 var reader = new WinMemoryReader(handle);
-var aobscanner = new AobScanner(reader);
+var aobscanner = new AobScanner(processHandler, reader);
 
 string pattern = "17 00 00";
 int iterations = 10;

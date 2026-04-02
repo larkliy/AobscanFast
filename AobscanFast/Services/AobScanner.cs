@@ -7,9 +7,25 @@ using System.Buffers;
 
 namespace AobscanFast.Services;
 
-public class AobScanner(IMemoryReader memoryReader)
+public class AobScanner(IProcessHandler processHandler, IMemoryReader memoryReader)
 {
     private readonly Lock _syncRoot = new();
+
+    public List<nint> ScanModule(uint processId, string moduleName, string pattern, CancellationToken ct = default)
+    {
+        var modInfo = processHandler.GetModuleInfo(processId, moduleName);
+
+        if (modInfo == null)
+            return [];
+
+        var options = new AobScanOptions
+        {
+            MinScanAddress = modInfo.Value.BaseAddress,
+            MaxScanAddress = (nint)(modInfo.Value.BaseAddress + modInfo.Value.Size)
+        };
+
+        return Scan(pattern, options, ct);
+    }
 
     public List<nint> Scan(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
     {
