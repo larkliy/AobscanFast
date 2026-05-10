@@ -4,7 +4,7 @@ ReadProcessMemory
 WriteProcessMemory
 
 VirtualQueryEx
-
+VirtualQuery
 CreateToolhelp32Snapshot
 
 Process32FirstW

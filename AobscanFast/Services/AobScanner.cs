@@ -12,30 +12,33 @@ public sealed class AobScanner
 {
     private readonly Lock _syncRoot = new();
     private readonly IProcessHandler _processHandler;
-    private readonly IMemoryReader _memoryReader;
+    private readonly IMemoryRegionEnumerator _regionEnumerator;
+    private readonly IMemoryAccessor _memoryAccessor;
     private readonly IPatternParserResolver _patternParserResolver;
     private readonly IPatternMatcherResolver _patternMatcherResolver;
     private readonly IMemoryRangePlanner _memoryRangePlanner;
 
-    public AobScanner(IMemoryReader memoryReader)
-        : this(NullProcessHandler.Instance, memoryReader, new PatternParserResolver(), new PatternMatcherResolver(), new RegionProcessor())
+    public AobScanner(IMemoryRegionEnumerator regionEnumerator, IMemoryAccessor memoryAccessor)
+        : this(NullProcessHandler.Instance, regionEnumerator, memoryAccessor, new PatternParserResolver(), new PatternMatcherResolver(), new RegionProcessor())
     {
     }
 
-    public AobScanner(IProcessHandler processHandler, IMemoryReader memoryReader)
-        : this(processHandler, memoryReader, new PatternParserResolver(), new PatternMatcherResolver(), new RegionProcessor())
+    public AobScanner(IProcessHandler processHandler, IMemoryRegionEnumerator regionEnumerator, IMemoryAccessor memoryAccessor)
+        : this(processHandler, regionEnumerator, memoryAccessor, new PatternParserResolver(), new PatternMatcherResolver(), new RegionProcessor())
     {
     }
 
     internal AobScanner(
         IProcessHandler processHandler,
-        IMemoryReader memoryReader,
+        IMemoryRegionEnumerator regionEnumerator,
+        IMemoryAccessor memoryAccessor,
         IPatternParserResolver patternParserResolver,
         IPatternMatcherResolver patternMatcherResolver,
         IMemoryRangePlanner memoryRangePlanner)
     {
         _processHandler = processHandler ?? throw new ArgumentNullException(nameof(processHandler));
-        _memoryReader = memoryReader ?? throw new ArgumentNullException(nameof(memoryReader));
+        _regionEnumerator = regionEnumerator ?? throw new ArgumentNullException(nameof(regionEnumerator));
+        _memoryAccessor = memoryAccessor ?? throw new ArgumentNullException(nameof(memoryAccessor));
         _patternParserResolver = patternParserResolver ?? throw new ArgumentNullException(nameof(patternParserResolver));
         _patternMatcherResolver = patternMatcherResolver ?? throw new ArgumentNullException(nameof(patternMatcherResolver));
         _memoryRangePlanner = memoryRangePlanner ?? throw new ArgumentNullException(nameof(memoryRangePlanner));
@@ -44,9 +47,7 @@ public sealed class AobScanner
     public List<nint> Scan(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
     {
         var parser = _patternParserResolver.Resolve(patternInput);
-        var pattern = parser.Parse(patternInput);
-
-        return Scan(pattern, options, ct);
+        return Scan(parser.Parse(patternInput), options, ct);
     }
 
     public nint? ScanFirst(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
@@ -55,9 +56,7 @@ public sealed class AobScanner
     public List<nint> ScanModule(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
     {
         var parser = _patternParserResolver.Resolve(patternInput);
-        var pattern = parser.Parse(patternInput);
-
-        return ScanModule(processId, moduleName, pattern, ct);
+        return ScanModule(processId, moduleName, parser.Parse(patternInput), ct);
     }
 
     public nint? ScanModuleFirst(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
@@ -72,13 +71,14 @@ public sealed class AobScanner
         if (moduleInfo is null)
             return [];
 
-        var options = new AobScanOptions
-        {
-            MinScanAddress = moduleInfo.Value.BaseAddress,
-            MaxScanAddress = moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size
-        };
-
-        return Scan(pattern, options, ct);
+        return Scan(
+            pattern,
+            new AobScanOptions
+            {
+                MinScanAddress = moduleInfo.Value.BaseAddress,
+                MaxScanAddress = moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size
+            },
+            ct);
     }
 
     public nint? ScanModuleFirst(uint processId, string moduleName, AobPattern pattern, CancellationToken ct = default)
@@ -94,12 +94,7 @@ public sealed class AobScanner
             throw new ArgumentException("Pattern must contain at least one byte.", nameof(pattern));
 
         var matcher = _patternMatcherResolver.Resolve(pattern);
-
-        var rawRegions = _memoryReader.GetRegions(
-            options.MinScanAddress,
-            options.MaxScanAddress,
-            options.MemoryAccess);
-
+        var rawRegions = _regionEnumerator.GetRegions(options.MinScanAddress, options.MaxScanAddress, options.MemoryAccess);
         var mergedRegions = _memoryRangePlanner.MergeAdjacentRegions(rawRegions);
         var scanChunks = _memoryRangePlanner.CreateScanChunks(mergedRegions, pattern.Length);
         var results = new List<nint>(1024);
@@ -116,10 +111,8 @@ public sealed class AobScanner
 
                 try
                 {
-                    if (_memoryReader.ReadMemory(chunk.BaseAddress, buffer, out _))
-                    {
+                    if (_memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out _))
                         matcher.ScanChunk(chunk, pattern, localResults, buffer);
-                    }
                 }
                 finally
                 {
@@ -131,9 +124,7 @@ public sealed class AobScanner
             localResults =>
             {
                 lock (_syncRoot)
-                {
                     results.AddRange(localResults);
-                }
             });
 
         return results;

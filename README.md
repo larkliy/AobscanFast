@@ -64,8 +64,7 @@ uint? pid = handler.FindIdByName("notepad");
 using var handle = handler.OpenProcess(pid.Value);
 
 // 3. Scan memory
-var reader = new WinMemoryReader(handle);
-var scanner = new AobScanner(reader);
+var scanner = AobScannerFactory.ForRemoteProcess(handle);
 
 var results = scanner.Scan("48 8B ?? ?? ?? AA");
 var first = scanner.ScanFirst("48 8B ?? ?? ?? AA");
@@ -90,13 +89,24 @@ if (module != null)
 }
 ```
 
+### 3. In-Process Scan (Injected DLL / NativeAOT)
+
+If your code already runs inside the target process, use the current-process backend and avoid `ReadProcessMemory`.
+
+```csharp
+using AobscanFast.Services;
+
+var scanner = AobScannerFactory.ForCurrentProcess();
+var results = scanner.Scan("48 8B ?? ?? ?? AA");
+```
+
 ---
 
 ## 🏗 Architecture
 
 The project follows **SOLID** principles to remain maintainable and extensible:
 
-- **Abstractions:** Interfaces like `IMemoryReader` and `IProcessHandler`.
+- **Abstractions:** Interfaces like `IMemoryAccessor`, `IMemoryRegionEnumerator`, and `IProcessHandler`.
 - **Services:** Core logic, including `AobScanner` and SIMD `PatternMatchers`.
 - **Infrastructure:** Platform-specific implementations (currently Windows via `CsWin32`).
 - **Models:** Value types like `MemoryRange` and `AobPattern`.

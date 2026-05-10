@@ -5,7 +5,7 @@ using System.Diagnostics;
 Console.WriteLine($"Hello");
 
 var processHandler = new WinProcessHandler();
-var processId = processHandler.FindIdByName("HD-Player");
+var processId = processHandler.FindIdByName("notepad.exe");
 
 if (processId == null)
 {
@@ -14,11 +14,12 @@ if (processId == null)
 }
 
 using var handle = processHandler.OpenProcess(processId.Value);
-var reader = new WinMemoryReader(handle);
-var scanner = new AobScanner(processHandler, reader);
+var regionEnumerator = new RemoteProcessRegionEnumerator(handle);
+var memoryAccessor = new RemoteProcessMemoryAccessor(handle);
+var scanner = new AobScanner(processHandler, regionEnumerator, memoryAccessor);
 
-string pattern = "17 00 00";
-int iterations = 10;
+string pattern = "16 00 00 00 00";
+int iterations = 500;
 
 Console.WriteLine("Подготовка к сканированию...");
 

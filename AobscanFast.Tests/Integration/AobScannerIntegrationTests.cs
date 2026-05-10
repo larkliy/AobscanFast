@@ -1,47 +1,47 @@
-﻿using AobscanFast.Core.Interfaces;
+using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models;
 using AobscanFast.Services;
 using NSubstitute;
 
-namespace AobscanFast.Tests.Integration
+namespace AobscanFast.Tests.Integration;
+
+public class AobScannerIntegrationTests
 {
-    public class AobScannerIntegrationTests
+    private readonly IMemoryRegionEnumerator _regionEnumerator = Substitute.For<IMemoryRegionEnumerator>();
+    private readonly IMemoryAccessor _memoryAccessor = Substitute.For<IMemoryAccessor>();
+    private readonly IProcessHandler _handler = Substitute.For<IProcessHandler>();
+
+    [Fact]
+    public void Scan_NoRegions_ReturnsEmpty()
     {
-        private readonly IMemoryReader _reader = Substitute.For<IMemoryReader>();
-        private readonly IProcessHandler _handler = Substitute.For<IProcessHandler>();
+        _regionEnumerator.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([]);
 
-        [Fact]
-        public void Scan_NoRegions_ReturnsEmpty()
-        {
-            _reader.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([]);
+        var scanner = new AobScanner(_handler, _regionEnumerator, _memoryAccessor);
+        var results = scanner.Scan("AA BB CC");
 
-            var scanner = new AobScanner(_handler, _reader);
-            var results = scanner.Scan("AA BB CC");
+        Assert.Empty(results);
+    }
 
-            Assert.Empty(results);
-        }
+    [Fact]
+    public void Scan_CancellationRequested_ThrowsOrReturnsPartial()
+    {
+        _regionEnumerator.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([new(0x1000, 64)]);
 
-        [Fact]
-        public void Scan_CancellationRequested_ThrowsOrReturnsPartial()
-        {
-            _reader.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([new(0x1000, 64)]);
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
 
-            using var cts = new CancellationTokenSource();
-            cts.Cancel();
+        var scanner = new AobScanner(_handler, _regionEnumerator, _memoryAccessor);
 
-            var scanner = new AobScanner(_handler, _reader);
+        Assert.Throws<OperationCanceledException>(() => scanner.Scan("AA BB", ct: cts.Token));
+    }
 
-            Assert.Throws<OperationCanceledException>(() => scanner.Scan("AA BB", ct: cts.Token));
-        }
+    [Fact]
+    public void ScanFirst_NoResults_ReturnsNull()
+    {
+        _regionEnumerator.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([]);
 
-        [Fact]
-        public void ScanFirst_NoResults_ReturnsNull()
-        {
-            _reader.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([]);
+        var scanner = new AobScanner(_handler, _regionEnumerator, _memoryAccessor);
 
-            var scanner = new AobScanner(_handler, _reader);
-
-            Assert.Null(scanner.ScanFirst("AA BB CC"));
-        }
+        Assert.Null(scanner.ScanFirst("AA BB CC"));
     }
 }
