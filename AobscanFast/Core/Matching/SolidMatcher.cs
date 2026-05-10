@@ -4,7 +4,7 @@ using AobscanFast.Core.Models.Pattern;
 
 namespace AobscanFast.Core.Matching;
 
-internal class SolidMatcher : IPatternMatcher
+internal sealed class SolidMatcher : IPatternMatcher
 {
     public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer)
     {

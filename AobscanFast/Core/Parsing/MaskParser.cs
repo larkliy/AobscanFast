@@ -10,6 +10,8 @@ internal class MaskParser : IPatternParser
 {
     public AobPattern Parse(string input)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(input);
+
         byte[] pooledBytes = ArrayPool<byte>.Shared.Rent(input.Length);
         byte[] pooledMask = ArrayPool<byte>.Shared.Rent(input.Length);
 
@@ -25,18 +27,24 @@ internal class MaskParser : IPatternParser
 
                 if (part.Length == 0) continue;
 
-                if (part[0] == '?')
+                if (part.SequenceEqual("?".AsSpan()) || part.SequenceEqual("??".AsSpan()))
                 {
                     pBytes[length] = 0;
                     pMask[length] = 0;
                 }
                 else
                 {
+                    if (part.Length != 2)
+                        throw new FormatException($"Invalid masked byte token '{part.ToString()}'.");
+
                     pBytes[length] = byte.Parse(part, NumberStyles.HexNumber);
                     pMask[length] = 0xFF;
                 }
                 length++;
             }
+
+            if (length == 0)
+                throw new FormatException("Pattern must contain at least one byte token.");
 
             var finalBytes = pBytes[..length].ToArray();
             var finalMask = pMask[..length].ToArray();

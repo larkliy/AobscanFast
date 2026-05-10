@@ -12,7 +12,7 @@ public class MaskMatcherTests
 
     private static AobPattern ParsePattern(string input)
     {
-        var parser = ParserFactory.GetParser(input);
+        var parser = new PatternParserResolver().Resolve(input);
         return parser.Parse(input);
     }
 
@@ -112,5 +112,20 @@ public class MaskMatcherTests
             _matcher.ScanChunk(range, pattern, results, buffer);
             Assert.Single(results);
         }
+    }
+
+    [Fact]
+    public void ScanChunk_AllWildcards_MatchesEveryValidPosition()
+    {
+        var pattern = ParsePattern("?? ??");
+        var buffer = new byte[] { 0x10, 0x20, 0x30 };
+        var range = new MemoryRange(0x5000, buffer.Length);
+        var results = new List<nint>();
+
+        _matcher.ScanChunk(range, pattern, results, buffer);
+
+        Assert.Equal(2, results.Count);
+        Assert.Equal((nint)0x5000, results[0]);
+        Assert.Equal((nint)0x5001, results[1]);
     }
 }

@@ -1,70 +1,77 @@
-﻿using AobscanFast.Core.Models;
+using AobscanFast.Core.Interfaces;
+using AobscanFast.Core.Models;
 using System.Runtime.InteropServices;
 
 namespace AobscanFast.Core.Helpers;
 
-public static class RegionProcessor
+public sealed class RegionProcessor : IMemoryRangePlanner
 {
-    public static List<MemoryRange> CreateMemoryChunks(List<MemoryRange> ranges, int patternLength)
+    public List<MemoryRange> CreateScanChunks(List<MemoryRange> ranges, int patternLength)
     {
         const nint chunkSize = 256 * 1024;
 
+        ArgumentNullException.ThrowIfNull(ranges);
+
+        if (patternLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(patternLength), "Pattern length must be greater than zero.");
+
         if (patternLength >= chunkSize)
-            throw new ArgumentException("Pattern length cannot exceed chunk size");
+            throw new ArgumentException("Pattern length cannot exceed chunk size", nameof(patternLength));
 
         var result = new List<MemoryRange>(ranges.Count * 5);
         nint overlap = patternLength - 1;
 
         foreach (ref readonly var range in CollectionsMarshal.AsSpan(ranges))
         {
-            nint ptr = range.BaseAddress;
-            nint remaining = range.Size;
+            nint currentAddress = range.BaseAddress;
+            nint remainingBytes = range.Size;
 
-            while (remaining >= patternLength)
+            while (remainingBytes >= patternLength)
             {
-                nint size = Math.Min(remaining, chunkSize);
+                nint chunkLength = Math.Min(remainingBytes, chunkSize);
 
-                result.Add(new MemoryRange(ptr, size));
+                result.Add(new MemoryRange(currentAddress, chunkLength));
 
-                if (size == remaining)
+                if (chunkLength == remainingBytes)
                     break;
 
-                nint step = size - overlap;
-                ptr += step;
-                remaining -= step;
+                nint advance = chunkLength - overlap;
+                currentAddress += advance;
+                remainingBytes -= advance;
             }
         }
 
         return result;
     }
 
-    public static List<MemoryRange> MergeRegions(List<MemoryRange> regions)
+    public List<MemoryRange> MergeAdjacentRegions(List<MemoryRange> regions)
     {
+        ArgumentNullException.ThrowIfNull(regions);
+
         if (regions.Count == 0)
             return regions;
 
         var result = new List<MemoryRange>(regions.Count);
         var span = CollectionsMarshal.AsSpan(regions);
 
-        MemoryRange current = span[0];
+        MemoryRange currentRange = span[0];
 
         for (int i = 1; i < span.Length; i++)
         {
-            ref readonly var next = ref span[i];
+            ref readonly var nextRange = ref span[i];
 
-            if (current.BaseAddress + current.Size == next.BaseAddress)
+            if (currentRange.BaseAddress + currentRange.Size == nextRange.BaseAddress)
             {
-                current = new MemoryRange(current.BaseAddress, current.Size + next.Size);
+                currentRange = new MemoryRange(currentRange.BaseAddress, currentRange.Size + nextRange.Size);
             }
             else
             {
-                result.Add(current);
-
-                current = next;
+                result.Add(currentRange);
+                currentRange = nextRange;
             }
         }
 
-        result.Add(current);
+        result.Add(currentRange);
 
         return result;
     }

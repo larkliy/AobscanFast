@@ -68,6 +68,7 @@ var reader = new WinMemoryReader(handle);
 var scanner = new AobScanner(reader);
 
 var results = scanner.Scan("48 8B ?? ?? ?? AA");
+var first = scanner.ScanFirst("48 8B ?? ?? ?? AA");
 ```
 
 ### 2. Module-Specific Scan

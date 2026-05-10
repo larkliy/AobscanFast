@@ -7,22 +7,34 @@ using System.Runtime.Intrinsics;
 
 namespace AobscanFast.Core.Matching
 {
-    internal class MaskMatcher : IPatternMatcher
+    internal sealed class MaskMatcher : IPatternMatcher
     {
         public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer)
         {
-            int lastValidPatternStart = (int)(range.Size - pattern.Bytes.Length);
-            int lastValidSeqPos = lastValidPatternStart + pattern.SearchSequenceOffset!;
+            int lastValidPatternStart = (int)(range.Size - pattern.Length);
+            ReadOnlySpan<byte> searchSequence = pattern.SearchSequence ?? [];
+
+            if (searchSequence.Length == 0)
+            {
+                for (int patternStart = 0; patternStart <= lastValidPatternStart; patternStart++)
+                {
+                    results.Add(range.BaseAddress + patternStart);
+                }
+
+                return;
+            }
+
+            int lastValidSeqPos = lastValidPatternStart + pattern.SearchSequenceOffset;
             int currentOffset = 0;
 
             while (true)
             {
-                int remainingLength = lastValidSeqPos - currentOffset + pattern.SearchSequence!.Length;
-                if (remainingLength < pattern.SearchSequence!.Length)
+                int remainingLength = lastValidSeqPos - currentOffset + searchSequence.Length;
+                if (remainingLength < searchSequence.Length)
                     break;
 
                 int hitIndex;
-                if ((hitIndex = buffer.Slice(currentOffset, remainingLength).IndexOf(pattern.SearchSequence)) == -1)
+                if ((hitIndex = buffer.Slice(currentOffset, remainingLength).IndexOf(searchSequence)) == -1)
                     break;
 
                 int foundSeqPos = currentOffset + hitIndex;
@@ -30,7 +42,7 @@ namespace AobscanFast.Core.Matching
 
                 if (patternStartPos >= 0)
                 {
-                    var candidateBytes = buffer.Slice(patternStartPos, pattern.Bytes.Length);
+                    var candidateBytes = buffer.Slice(patternStartPos, pattern.Length);
                     if (IsMatch(pattern, candidateBytes))
                         results.Add(range.BaseAddress + patternStartPos);
                 }
@@ -42,7 +54,7 @@ namespace AobscanFast.Core.Matching
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static bool IsMatch(AobPattern pattern, ReadOnlySpan<byte> data)
         {
-            nuint length = (nuint)pattern.Bytes.Length;
+            nuint length = (nuint)pattern.Length;
 
             if ((nuint)data.Length < length)
                 return false;

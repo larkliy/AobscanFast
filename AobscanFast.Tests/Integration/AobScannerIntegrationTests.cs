@@ -33,5 +33,15 @@ namespace AobscanFast.Tests.Integration
 
             Assert.Throws<OperationCanceledException>(() => scanner.Scan("AA BB", ct: cts.Token));
         }
+
+        [Fact]
+        public void ScanFirst_NoResults_ReturnsNull()
+        {
+            _reader.GetRegions(Arg.Any<nint>(), Arg.Any<nint>(), Arg.Any<MemoryAccess>()).Returns([]);
+
+            var scanner = new AobScanner(_handler, _reader);
+
+            Assert.Null(scanner.ScanFirst("AA BB CC"));
+        }
     }
 }

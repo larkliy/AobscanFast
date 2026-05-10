@@ -8,17 +8,15 @@ public sealed class AobPattern
     public byte[]? Mask { get; init; }
     public byte[]? SearchSequence { get; init; }
     public int SearchSequenceOffset { get; init; }
+    public int Length => Bytes.Length;
 
     public bool HasMask => Mask is not null;
 
-    public static AobPattern FromBytes(byte[] input, byte[]? mask = null)
+    public static AobPattern FromBytes(byte[] input, byte[]? mask = null) => new()
     {
-        return new AobPattern
-        {
-            Bytes = input,
-            Mask = mask
-        };
-    }
+        Bytes = input,
+        Mask = mask
+    };
 
     public static AobPattern FromString(string input, Encoding? encoding = null)
     {
@@ -26,7 +24,7 @@ public sealed class AobPattern
 
         byte[] convertedBytes = encoding.GetBytes(input);
 
-        return new AobPattern
+        return new()
         {
             Bytes = convertedBytes
         };

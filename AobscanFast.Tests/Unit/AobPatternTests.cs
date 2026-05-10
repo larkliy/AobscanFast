@@ -7,7 +7,7 @@ public class AobPatternTests
 {
     private static AobPattern ParsePattern(string input)
     {
-        var parser = ParserFactory.GetParser(input);
+        var parser = new PatternParserResolver().Resolve(input);
         return parser.Parse(input);
     }
 

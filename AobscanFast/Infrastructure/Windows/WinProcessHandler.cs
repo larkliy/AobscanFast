@@ -11,9 +11,12 @@ public class WinProcessHandler : IProcessHandler
 {
     public uint? FindIdByName(string processName, int index = 0)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(processName);
+
         using var hSnapshot = PInvoke.CreateToolhelp32Snapshot_SafeHandle(CREATE_TOOLHELP_SNAPSHOT_FLAGS.TH32CS_SNAPPROCESS, 0);
-        
+
         var entry32 = new PROCESSENTRY32W { dwSize = (uint)Unsafe.SizeOf<PROCESSENTRY32W>() };
+        int matchIndex = 0;
 
         if (!PInvoke.Process32FirstW(hSnapshot, ref entry32))
             return null;
@@ -21,7 +24,12 @@ public class WinProcessHandler : IProcessHandler
         do
         {
             if (entry32.szExeFile.AsReadOnlySpan().SliceAtNull().Equals(processName, StringComparison.OrdinalIgnoreCase))
-                return entry32.th32ProcessID;
+            {
+                if (matchIndex == index)
+                    return entry32.th32ProcessID;
+
+                matchIndex++;
+            }
 
         } while (PInvoke.Process32NextW(hSnapshot, ref entry32));
 
@@ -30,7 +38,11 @@ public class WinProcessHandler : IProcessHandler
 
     public unsafe (nint BaseAddress, uint Size)? GetModuleInfo(uint processId, string moduleName)
     {
-        using var hSnapshot = PInvoke.CreateToolhelp32Snapshot_SafeHandle(CREATE_TOOLHELP_SNAPSHOT_FLAGS.TH32CS_SNAPMODULE, 0);
+        ArgumentException.ThrowIfNullOrWhiteSpace(moduleName);
+
+        using var hSnapshot = PInvoke.CreateToolhelp32Snapshot_SafeHandle(
+            CREATE_TOOLHELP_SNAPSHOT_FLAGS.TH32CS_SNAPMODULE | CREATE_TOOLHELP_SNAPSHOT_FLAGS.TH32CS_SNAPMODULE32,
+            processId);
 
         var entry32 = new MODULEENTRY32W { dwSize = (uint)Unsafe.SizeOf<MODULEENTRY32W>() };
 
@@ -49,6 +61,12 @@ public class WinProcessHandler : IProcessHandler
 
     public SafeHandle OpenProcess(uint processId)
     {
-        return PInvoke.OpenProcess_SafeHandle(PROCESS_ACCESS_RIGHTS.PROCESS_ALL_ACCESS, false, processId);
+        return PInvoke.OpenProcess_SafeHandle(
+            PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_INFORMATION |
+            PROCESS_ACCESS_RIGHTS.PROCESS_VM_OPERATION |
+            PROCESS_ACCESS_RIGHTS.PROCESS_VM_READ |
+            PROCESS_ACCESS_RIGHTS.PROCESS_VM_WRITE,
+            false,
+            processId);
     }
 }

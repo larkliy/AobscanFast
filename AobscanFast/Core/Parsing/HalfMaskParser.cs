@@ -10,6 +10,8 @@ internal class HalfMaskParser : IPatternParser
 {
     public AobPattern Parse(string input)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(input);
+
         byte[] pooledBytes = ArrayPool<byte>.Shared.Rent(input.Length);
         byte[] pooledMask = ArrayPool<byte>.Shared.Rent(input.Length);
 
@@ -25,12 +27,18 @@ internal class HalfMaskParser : IPatternParser
 
                 if (token.Length == 0) continue;
 
+                if (token.Length is < 1 or > 2)
+                    throw new FormatException($"Invalid half-mask token '{token.ToString()}'.");
+
                 ParseMaskedToken(token, out byte b, out byte m);
 
                 pBytes[length] = b;
                 pMask[length] = m;
                 length++;
             }
+
+            if (length == 0)
+                throw new FormatException("Pattern must contain at least one byte token.");
 
             var finalBytes = pBytes[..length].ToArray();
             var finalMask = pMask[..length].ToArray();

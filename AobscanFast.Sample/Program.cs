@@ -2,6 +2,8 @@
 using AobscanFast.Services;
 using System.Diagnostics;
 
+Console.WriteLine($"Hello");
+
 var processHandler = new WinProcessHandler();
 var processId = processHandler.FindIdByName("HD-Player");
 
@@ -13,14 +15,16 @@ if (processId == null)
 
 using var handle = processHandler.OpenProcess(processId.Value);
 var reader = new WinMemoryReader(handle);
-var aobscanner = new AobScanner(processHandler, reader);
+var scanner = new AobScanner(processHandler, reader);
 
 string pattern = "17 00 00";
 int iterations = 10;
 
 Console.WriteLine("Подготовка к сканированию...");
 
-var results = aobscanner.Scan(pattern);
+var results = scanner.Scan(pattern);
+var firstResult = scanner.ScanFirst(pattern);
+Console.WriteLine($"Первое совпадение: {(firstResult is null ? "не найдено" : $"0x{firstResult.Value:X}")}");
 
 Console.WriteLine($"Начинаем сканирование ({iterations} итераций)...");
 
@@ -29,7 +33,7 @@ stopwatch.Start();
 
 for (int i = 0; i < iterations; i++)
 {
-    results = aobscanner.Scan(pattern);
+    results = scanner.Scan(pattern);
 }
 
 stopwatch.Stop();

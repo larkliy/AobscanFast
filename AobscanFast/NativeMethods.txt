@@ -1,6 +1,7 @@
 OpenProcess
 CloseHandle
 ReadProcessMemory
+WriteProcessMemory
 
 VirtualQueryEx
 

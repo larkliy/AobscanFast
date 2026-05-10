@@ -1,0 +1,15 @@
+{
+  "profiles": {
+    "WSL": {
+      "commandName": "WSL",
+      "commandLineArgs": "\"{OutDir}/AobscanFast.Sample.dll\"",
+      "workingDirectory": "{ProjectDir}",
+      "distributionName": "",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "setupScriptPath": "/home/heller/setup-dotnet.sh"
+    }
+  }
+}

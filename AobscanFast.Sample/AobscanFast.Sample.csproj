@@ -7,7 +7,7 @@
     <Nullable>enable</Nullable>
 	  <PublishAot>true</PublishAot>
 	  <OptimizationPreference>Speed</OptimizationPreference>
-	  <IlcInstructionSet>native</IlcInstructionSet>
+	  <IlcDehydrate>false</IlcDehydrate>
   </PropertyGroup>
 
   <ItemGroup>

@@ -9,6 +9,8 @@ internal class SolidParser : IPatternParser
 {
     public AobPattern Parse(string input)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(input);
+
         byte[] pooledBytes = ArrayPool<byte>.Shared.Rent(input.Length);
 
         try
@@ -22,9 +24,15 @@ internal class SolidParser : IPatternParser
 
                 if (part.Length == 0) continue;
 
+                if (part.Length != 2)
+                    throw new FormatException($"Invalid solid byte token '{part}'.");
+
                 pooledBytes[pos] = byte.Parse(part, NumberStyles.HexNumber);
                 pos++;
             }
+
+            if (pos == 0)
+                throw new FormatException("Pattern must contain at least one byte token.");
 
             return new AobPattern
             {

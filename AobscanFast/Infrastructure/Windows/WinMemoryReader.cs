@@ -50,4 +50,9 @@ public unsafe class WinMemoryReader(SafeHandle processHandle) : IMemoryReader
 
         return true;
     }
+
+    public bool WriteMemory(nint baseAddress, ReadOnlySpan<byte> buffer, out nuint bytesWritten)
+    {
+        return PInvoke.WriteProcessMemory(processHandle, baseAddress.ToPointer(), buffer, out bytesWritten);
+    }
 }
