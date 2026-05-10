@@ -128,4 +128,3 @@ If you like this project, please **give it a Star**! 🌟 It helps me stay motiv
 <div align="center">
   <i>Engineered for speed, architected for humans.</i>
 </div>
-```
