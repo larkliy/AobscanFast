@@ -1,57 +1,140 @@
-﻿using AobscanFast.Infrastructure.Windows;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
+using AobscanFast.Core.Interfaces;
+using AobscanFast.Core.Models;
 using AobscanFast.Services;
-using System.Diagnostics;
 
-Console.WriteLine($"Hello");
+bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+bool isLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
 
-var processHandler = new WinProcessHandler();
-var processId = processHandler.FindIdByName("notepad.exe");
+Console.WriteLine($"Platform: {(isWindows ? "Windows" : isLinux ? "Linux" : "Unknown")}");
+Console.WriteLine($"Process ID: {Environment.ProcessId}\n");
 
-if (processId == null)
+// ============================================================================
+// 1. Current process — direct memory read/write
+// ============================================================================
+Console.WriteLine("=== 1. Current Process Memory Access ===");
+
+IMemoryAccessor currentAccessor = isWindows
+    ? new AobscanFast.Infrastructure.Windows.CurrentProcessMemoryAccessor()
+    : new AobscanFast.Infrastructure.Linux.CurrentProcessMemoryAccessor();
+
+Span<byte> writeBuf = [0xDE, 0xAD, 0xBE, 0xEF];
+Span<byte> readBuf = stackalloc byte[writeBuf.Length];
+
+unsafe
 {
-    Console.WriteLine($"Process ID is not found.");
-    return;
+    fixed (byte* p = writeBuf)
+    {
+        if (currentAccessor.WriteMemory((nint)p, writeBuf, out _) &&
+            currentAccessor.ReadMemory((nint)p, readBuf, out _))
+        {
+            bool match = writeBuf.SequenceEqual(readBuf);
+            Console.WriteLine($"  Write + Read: {(match ? "OK" : "DATA MISMATCH")}");
+            Console.WriteLine($"  Data: {BitConverter.ToString(readBuf.ToArray())}");
+        }
+    }
 }
 
-using var handle = processHandler.OpenProcess(processId.Value);
-var regionEnumerator = new RemoteProcessRegionEnumerator(handle);
-var memoryAccessor = new RemoteProcessMemoryAccessor(handle);
-var scanner = new AobScanner(processHandler, regionEnumerator, memoryAccessor);
+// ============================================================================
+// 2. Current process — region enumeration
+// ============================================================================
+Console.WriteLine("\n=== 2. Current Process Memory Regions ===");
 
-string pattern = "16 00 00 00 00";
-int iterations = 500;
+IMemoryRegionEnumerator currentEnumerator = isWindows
+    ? new AobscanFast.Infrastructure.Windows.CurrentProcessRegionEnumerator()
+    : new AobscanFast.Infrastructure.Linux.CurrentProcessRegionEnumerator();
 
-Console.WriteLine("Подготовка к сканированию...");
+#pragma warning disable CS8778
+var regions = currentEnumerator.GetRegions(0, (nint)long.MaxValue, MemoryAccess.Readable);
+#pragma warning restore CS8778
+Console.WriteLine($"  Total readable regions: {regions.Count}");
+foreach (var r in regions.Take(5))
+    Console.WriteLine($"    0x{r.BaseAddress:X16}  size={r.Size,10}");
+if (regions.Count > 5)
+    Console.WriteLine($"    ... and {regions.Count - 5} more");
 
-var results = scanner.Scan(pattern);
-var firstResult = scanner.ScanFirst(pattern);
-Console.WriteLine($"Первое совпадение: {(firstResult is null ? "не найдено" : $"0x{firstResult.Value:X}")}");
+// ============================================================================
+// 3. Current process — AobScanner (self-scan for benchmarks)
+// ============================================================================
+Console.WriteLine("\n=== 3. AobScanner — Current Process ===");
 
-Console.WriteLine($"Начинаем сканирование ({iterations} итераций)...");
+var localScanner = AobScannerFactory.ForCurrentProcess();
+string testPattern = "DE AD BE EF";
 
-var stopwatch = new Stopwatch();
-stopwatch.Start();
+var scanResult = localScanner.ScanFirst(testPattern);
+Console.WriteLine($"  ScanFirst(\"{testPattern}\"): {(scanResult.HasValue ? $"0x{scanResult.Value:X}" : "not found")}");
+
+const int iterations = 100;
+var sw = Stopwatch.StartNew();
+int totalFound = 0;
 
 for (int i = 0; i < iterations; i++)
 {
-    results = scanner.Scan(pattern);
+    var results = localScanner.Scan(testPattern);
+    totalFound = results.Count;
 }
 
-stopwatch.Stop();
+sw.Stop();
+double avgMs = sw.Elapsed.TotalMilliseconds / iterations;
+Console.WriteLine($"  Benchmark ({iterations}x Scan): avg={avgMs:F3}ms, found={totalFound}");
 
-double totalTimeMs = stopwatch.Elapsed.TotalMilliseconds;
-double averageTimeMs = totalTimeMs / iterations;
+// ============================================================================
+// 4. Remote process — open, read regions, scan
+// ============================================================================
+Console.WriteLine("\n=== 4. Remote Process ===");
 
-Console.WriteLine("======================================");
-Console.WriteLine($"Всего найдено: {results.Count}");
-Console.WriteLine($"Общее время ({iterations} раз): {totalTimeMs:F2} мс");
-Console.WriteLine($"Усредненное время 1 скана: {averageTimeMs:F4} мс");
-Console.WriteLine("======================================\n");
+IProcessHandler handler = isWindows
+    ? new AobscanFast.Infrastructure.Windows.WinProcessHandler()
+    : new AobscanFast.Infrastructure.Linux.LinuxProcessHandler();
 
-Console.WriteLine("Первые 10 адресов:");
-foreach (nint result in results.Take(10))
+string[] targetNames = isWindows ? ["notepad.exe"] : ["bash", "zsh", "sh"];
+uint? targetPid = null;
+
+foreach (var name in targetNames)
 {
-    Console.WriteLine($"Address: 0x{result:X2}");
+    targetPid = handler.FindIdByName(name);
+    if (targetPid.HasValue)
+    {
+        Console.WriteLine($"  Target: {name} (PID={targetPid.Value})");
+        break;
+    }
 }
 
-Console.WriteLine();
+if (targetPid.HasValue)
+{
+    using var handle = handler.OpenProcess(targetPid.Value);
+
+    IMemoryAccessor remoteAccessor = isWindows
+        ? new AobscanFast.Infrastructure.Windows.RemoteProcessMemoryAccessor(handle)
+        : new AobscanFast.Infrastructure.Linux.RemoteProcessMemoryAccessor(handle);
+
+    IMemoryRegionEnumerator remoteEnumerator = isWindows
+        ? new AobscanFast.Infrastructure.Windows.RemoteProcessRegionEnumerator(handle)
+        : new AobscanFast.Infrastructure.Linux.RemoteProcessRegionEnumerator(handle);
+
+#pragma warning disable CS8778
+    var remoteRegions = remoteEnumerator.GetRegions(0, (nint)long.MaxValue, MemoryAccess.Readable);
+#pragma warning restore CS8778
+
+    if (remoteRegions.Count > 0)
+    {
+        Span<byte> buf = stackalloc byte[64];
+        if (remoteAccessor.ReadMemory(remoteRegions[0].BaseAddress, buf, out var read))
+        {
+            Console.WriteLine($"  Remote read: {read} bytes from 0x{remoteRegions[0].BaseAddress:X}");
+            Console.WriteLine($"  Data: {BitConverter.ToString(buf[..(int)read].ToArray())}");
+        }
+    }
+
+    var remoteScanner = new AobScanner(handler, remoteEnumerator, remoteAccessor);
+    Console.WriteLine("  AobScanner created (remote process)");
+    Console.WriteLine($"  Regions to scan: {remoteRegions.Count}");
+}
+else
+{
+    Console.WriteLine($"  Target process not found.");
+    Console.WriteLine($"  Try starting: {(isWindows ? "notepad.exe" : "any process from the list: bash, zsh, sh")}");
+}
+
+Console.WriteLine("\nDone.");
