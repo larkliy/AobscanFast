@@ -18,7 +18,16 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
             return false;
         }
 
-        new ReadOnlySpan<byte>(baseAddress.ToPointer(), buffer.Length).CopyTo(buffer);
+        try
+        {
+            new ReadOnlySpan<byte>(baseAddress.ToPointer(), buffer.Length).CopyTo(buffer);
+        }
+        catch (AccessViolationException)
+        {
+            bytesRead = 0;
+            return false;
+        }
+
         bytesRead = (nuint)buffer.Length;
         return true;
     }
@@ -37,7 +46,16 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
             return false;
         }
 
-        buffer.CopyTo(new Span<byte>(baseAddress.ToPointer(), buffer.Length));
+        try
+        {
+            buffer.CopyTo(new Span<byte>(baseAddress.ToPointer(), buffer.Length));
+        }
+        catch (AccessViolationException)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+
         bytesWritten = (nuint)buffer.Length;
         return true;
     }

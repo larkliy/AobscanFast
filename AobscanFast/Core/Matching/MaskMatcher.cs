@@ -59,8 +59,11 @@ namespace AobscanFast.Core.Matching
             if ((nuint)data.Length < length)
                 return false;
 
+            if (pattern.Mask is null)
+                return false;
+
             ref byte pBytes = ref MemoryMarshal.GetArrayDataReference(pattern.Bytes);
-            ref byte pMask = ref MemoryMarshal.GetArrayDataReference(pattern.Mask!);
+            ref byte pMask = ref MemoryMarshal.GetArrayDataReference(pattern.Mask);
             ref byte pData = ref MemoryMarshal.GetReference(data);
 
             nuint i = 0;

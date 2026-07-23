@@ -1,4 +1,5 @@
-﻿using System.Text;
+﻿using AobscanFast.Core.Helpers;
+using System.Text;
 
 namespace AobscanFast.Core.Models.Pattern;
 
@@ -12,11 +13,27 @@ public sealed class AobPattern
 
     public bool HasMask => Mask is not null;
 
-    public static AobPattern FromBytes(byte[] input, byte[]? mask = null) => new()
+    public static AobPattern FromBytes(byte[] input, byte[]? mask = null)
     {
-        Bytes = input,
-        Mask = mask
-    };
+        if (mask is not null)
+        {
+            var (seq, offset) = ParserHelpers.FindLongestSolidRun(input, mask);
+
+            return new AobPattern
+            {
+                Bytes = input,
+                Mask = mask,
+                SearchSequence = seq,
+                SearchSequenceOffset = offset
+            };
+        }
+
+        return new AobPattern
+        {
+            Bytes = input,
+            Mask = mask
+        };
+    }
 
     public static AobPattern FromString(string input, Encoding? encoding = null)
     {

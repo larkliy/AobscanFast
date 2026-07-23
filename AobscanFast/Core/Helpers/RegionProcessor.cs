@@ -51,18 +51,24 @@ public sealed class RegionProcessor : IMemoryRangePlanner
         if (regions.Count == 0)
             return regions;
 
-        var result = new List<MemoryRange>(regions.Count);
-        var span = CollectionsMarshal.AsSpan(regions);
+        var sorted = new List<MemoryRange>(regions);
+        sorted.Sort((a, b) => a.BaseAddress.CompareTo(b.BaseAddress));
 
+        var span = CollectionsMarshal.AsSpan(sorted);
+        var result = new List<MemoryRange>(sorted.Count);
         MemoryRange currentRange = span[0];
 
         for (int i = 1; i < span.Length; i++)
         {
             ref readonly var nextRange = ref span[i];
 
-            if (currentRange.BaseAddress + currentRange.Size == nextRange.BaseAddress)
+            if (currentRange.BaseAddress + currentRange.Size >= nextRange.BaseAddress)
             {
-                currentRange = new MemoryRange(currentRange.BaseAddress, currentRange.Size + nextRange.Size);
+                nint mergedSize = Math.Max(
+                    currentRange.Size,
+                    nextRange.BaseAddress - currentRange.BaseAddress + nextRange.Size);
+
+                currentRange = new MemoryRange(currentRange.BaseAddress, mergedSize);
             }
             else
             {
