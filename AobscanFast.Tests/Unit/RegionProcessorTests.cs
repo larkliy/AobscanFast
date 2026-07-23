@@ -103,7 +103,7 @@ public class RegionProcessorTests
     {
         var ranges = new List<MemoryRange> { new(0x1000, 100) };
 
-        var result = _planner.CreateScanChunks(ranges, 4);
+        var result = _planner.CreateScanChunks(ranges, 4, 256 * 1024);
 
         Assert.Single(result);
         Assert.Equal(0x1000, result[0].BaseAddress);
@@ -115,7 +115,7 @@ public class RegionProcessorTests
     {
         var ranges = new List<MemoryRange> { new(0x1000, 3) };
 
-        var result = _planner.CreateScanChunks(ranges, 4);
+        var result = _planner.CreateScanChunks(ranges, 4, 256 * 1024);
 
         Assert.Empty(result);
     }
@@ -125,7 +125,7 @@ public class RegionProcessorTests
     {
         var ranges = new List<MemoryRange> { new(0x1000, 4) };
 
-        var result = _planner.CreateScanChunks(ranges, 4);
+        var result = _planner.CreateScanChunks(ranges, 4, 256 * 1024);
 
         Assert.Single(result);
         Assert.Equal(4, result[0].Size);
@@ -140,7 +140,7 @@ public class RegionProcessorTests
 
         var ranges = new List<MemoryRange> { new(0x0, regionSize) };
 
-        var result = _planner.CreateScanChunks(ranges, patternLen);
+        var result = _planner.CreateScanChunks(ranges, patternLen, chunkSize);
 
         Assert.Equal(2, result.Count);
         // First chunk is full size
@@ -157,6 +157,6 @@ public class RegionProcessorTests
         var ranges = new List<MemoryRange> { new(0x1000, 1000) };
 
         Assert.Throws<ArgumentException>(
-            () => _planner.CreateScanChunks(ranges, 256 * 1024));
+            () => _planner.CreateScanChunks(ranges, 256 * 1024, 256 * 1024));
     }
 }

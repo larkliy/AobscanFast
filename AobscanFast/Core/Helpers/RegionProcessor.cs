@@ -6,14 +6,15 @@ namespace AobscanFast.Core.Helpers;
 
 public sealed class RegionProcessor : IMemoryRangePlanner
 {
-    public List<MemoryRange> CreateScanChunks(List<MemoryRange> ranges, int patternLength)
+    public List<MemoryRange> CreateScanChunks(List<MemoryRange> ranges, int patternLength, nint chunkSize)
     {
-        const nint chunkSize = 256 * 1024;
-
         ArgumentNullException.ThrowIfNull(ranges);
 
         if (patternLength <= 0)
             throw new ArgumentOutOfRangeException(nameof(patternLength), "Pattern length must be greater than zero.");
+
+        if (chunkSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be greater than zero.");
 
         if (patternLength >= chunkSize)
             throw new ArgumentException("Pattern length cannot exceed chunk size", nameof(patternLength));
