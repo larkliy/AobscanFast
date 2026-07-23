@@ -32,10 +32,11 @@
 
 - **Cross-platform** — Windows (Win32 API) and Linux (`/proc/pid/mem` + `/proc/pid/maps`)
 - **SIMD cascade** — automatically uses `Vector512` (AVX-512), `Vector256` (AVX2), or `Vector128` (SSE2) depending on CPU capabilities
-- **Parallel scanning** — memory is split into 256 KB chunks and scanned concurrently via `Parallel.ForEach`
+- **Parallel scanning** — memory is split into configurable chunks (default 256 KB) and scanned concurrently via `Parallel.ForEach`
 - **Zero-allocation paths** — `ArrayPool<byte>`, `Span<T>`, `stackalloc` throughout; no per-chunk allocations in the hot loop
 - **Strategy pattern** — parsers and matchers are selected automatically based on the pattern syntax
 - **DI-ready** — all dependencies injected through interfaces; `AobScannerFactory` for quick start
+- **Configurable** — chunk size, parallelism degree, and result limit (`AobScanOptions.ChunkSize`, `MaxDegreeOfParallelism`, `MaxResults`)
 
 ---
 
@@ -99,7 +100,22 @@ var scanner = AobScannerFactory.ForCurrentProcess();
 var results = scanner.Scan("48 8B ?? ?? ?? AA");
 ```
 
-### 4. Linux
+### 4. Custom scan options
+
+```csharp
+var options = new AobScanOptions
+{
+    MinScanAddress = 0x7f0000000000,
+    MaxScanAddress = 0x7fffffffffff,
+    ChunkSize = 1024 * 1024,       // default 256 KB
+    MaxDegreeOfParallelism = 4,    // default -1 (all cores)
+    MaxResults = 10               // stop after finding 10 matches
+};
+
+var firstTen = scanner.Scan("48 8B ?? ?? ?? AA", options);
+```
+
+### 5. Linux
 
 ```csharp
 using AobscanFast.Infrastructure.Linux;
@@ -119,10 +135,12 @@ var results = scanner.Scan("48 8B ?? ?? ?? AA");
 ## Pattern syntax
 
 | Type | Example | Description |
-|---|---|---|
+|---|---|---|---|
 | Solid (exact) | `AA BB CC DD` | No wildcards — uses `Span<byte>.IndexOf` |
 | Byte mask | `AA ?? CC ??` | `??` matches any byte — SIMD masked comparison |
 | Nibble mask | `?A B? A?B` | `?` masks a single nibble — per-nibble mask |
+
+Patterns must be **space-separated** (tabs or other whitespace will cause a parse error).
 
 ---
 
@@ -150,10 +168,11 @@ Patterns are parsed once into an `AobPattern` (bytes, mask, search sequence). Th
 ## Performance
 
 - **Search-sequence pre-filter** — only positions where the longest solid run matches are verified with SIMD
-- **256 KB chunks** with overlap (`patternLength - 1`) — balances parallelism with cache efficiency
+- **Configurable chunk size** (default 256 KB) with overlap (`patternLength - 1`) — balances parallelism with cache efficiency
 - **Region merging** — adjacent memory regions are merged before chunking to minimize system calls
 - **SIMD cascade** — `MaskMatcher.IsMatch()` tries AVX-512 → AVX2 → SSE2 → scalar fallback
-- **Current-process zero-copy** — direct `unsafe` pointer reads when running inside the target process
+- **Current-process zero-copy** — direct `unsafe` pointer reads, protected by `VirtualQuery` probe (no `AccessViolationException` catch — fatal on .NET 10)
+- **Max results** — optional result limit cancels remaining work via linked `CancellationTokenSource`
 
 ---
 
