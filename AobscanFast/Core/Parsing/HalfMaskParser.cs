@@ -8,6 +8,27 @@ namespace AobscanFast.Core.Parsing;
 
 internal class HalfMaskParser : IPatternParser
 {
+    public bool CanParse(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return false;
+
+        ReadOnlySpan<char> span = input;
+        for (int i = 0; i < span.Length; i++)
+        {
+            if (span[i] != '?')
+                continue;
+
+            bool prevIsHex = i > 0 && span[i - 1] != ' ' && span[i - 1] != '?';
+            bool nextIsHex = i < span.Length - 1 && span[i + 1] != ' ' && span[i + 1] != '?';
+
+            if (prevIsHex || nextIsHex)
+                return true;
+        }
+
+        return false;
+    }
+
     public AobPattern Parse(string input)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);

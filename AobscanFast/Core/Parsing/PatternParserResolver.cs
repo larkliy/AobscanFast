@@ -4,30 +4,30 @@ namespace AobscanFast.Core.Parsing;
 
 internal sealed class PatternParserResolver : IPatternParserResolver
 {
-    private static readonly SolidParser s_solidParser = new();
-    private static readonly MaskParser s_maskParser = new();
-    private static readonly HalfMaskParser s_halfMaskParser = new();
+    private readonly IPatternParser[] _parsers;
+
+    public PatternParserResolver()
+        : this([new SolidParser(), new HalfMaskParser(), new MaskParser()])
+    {
+    }
+
+    public PatternParserResolver(IEnumerable<IPatternParser> parsers)
+    {
+        _parsers = (parsers ?? throw new ArgumentNullException(nameof(parsers)))
+            .Where(static p => p is not null)
+            .ToArray();
+    }
 
     public IPatternParser Resolve(string patternText)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(patternText);
 
-        if (!patternText.Contains('?'))
-            return s_solidParser;
-
-        for (int i = 0; i < patternText.Length; i++)
+        foreach (var parser in _parsers)
         {
-            if (patternText[i] != '?')
-                continue;
-
-            bool isHalfMask =
-                (i > 0 && patternText[i - 1] != ' ' && patternText[i - 1] != '?') ||
-                (i < patternText.Length - 1 && patternText[i + 1] != ' ' && patternText[i + 1] != '?');
-
-            if (isHalfMask)
-                return s_halfMaskParser;
+            if (parser.CanParse(patternText))
+                return parser;
         }
 
-        return s_maskParser;
+        throw new NotSupportedException($"No parser registered that can handle pattern '{patternText}'.");
     }
 }

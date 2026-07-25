@@ -4,44 +4,33 @@ using AobscanFast.Core.Matching;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
 using AobscanFast.Core.Parsing;
-using System.Buffers;
 
 namespace AobscanFast.Services;
 
 public sealed class AobScanner
 {
-    private readonly Lock _syncRoot = new();
     private readonly IProcessHandler _processHandler;
-    private readonly IMemoryRegionEnumerator _regionEnumerator;
-    private readonly IMemoryAccessor _memoryAccessor;
     private readonly IPatternParserResolver _patternParserResolver;
-    private readonly IPatternMatcherResolver _patternMatcherResolver;
-    private readonly IMemoryRangePlanner _memoryRangePlanner;
+    private readonly ScanOrchestrator _scanOrchestrator;
 
     public AobScanner(IMemoryRegionEnumerator regionEnumerator, IMemoryAccessor memoryAccessor)
-        : this(NullProcessHandler.Instance, regionEnumerator, memoryAccessor, new PatternParserResolver(), new PatternMatcherResolver(), new RegionProcessor())
+        : this(NullProcessHandler.Instance, new PatternParserResolver(), new ScanOrchestrator(regionEnumerator, memoryAccessor, new PatternMatcherResolver(), new RegionProcessor()))
     {
     }
 
     public AobScanner(IProcessHandler processHandler, IMemoryRegionEnumerator regionEnumerator, IMemoryAccessor memoryAccessor)
-        : this(processHandler, regionEnumerator, memoryAccessor, new PatternParserResolver(), new PatternMatcherResolver(), new RegionProcessor())
+        : this(processHandler, new PatternParserResolver(), new ScanOrchestrator(regionEnumerator, memoryAccessor, new PatternMatcherResolver(), new RegionProcessor()))
     {
     }
 
-    internal AobScanner(
+    public AobScanner(
         IProcessHandler processHandler,
-        IMemoryRegionEnumerator regionEnumerator,
-        IMemoryAccessor memoryAccessor,
         IPatternParserResolver patternParserResolver,
-        IPatternMatcherResolver patternMatcherResolver,
-        IMemoryRangePlanner memoryRangePlanner)
+        ScanOrchestrator scanOrchestrator)
     {
         _processHandler = processHandler ?? throw new ArgumentNullException(nameof(processHandler));
-        _regionEnumerator = regionEnumerator ?? throw new ArgumentNullException(nameof(regionEnumerator));
-        _memoryAccessor = memoryAccessor ?? throw new ArgumentNullException(nameof(memoryAccessor));
         _patternParserResolver = patternParserResolver ?? throw new ArgumentNullException(nameof(patternParserResolver));
-        _patternMatcherResolver = patternMatcherResolver ?? throw new ArgumentNullException(nameof(patternMatcherResolver));
-        _memoryRangePlanner = memoryRangePlanner ?? throw new ArgumentNullException(nameof(memoryRangePlanner));
+        _scanOrchestrator = scanOrchestrator ?? throw new ArgumentNullException(nameof(scanOrchestrator));
     }
 
     public List<nint> Scan(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
@@ -71,7 +60,7 @@ public sealed class AobScanner
         if (moduleInfo is null)
             return [];
 
-        return Scan(
+        return _scanOrchestrator.Scan(
             pattern,
             new AobScanOptions
             {
@@ -87,93 +76,8 @@ public sealed class AobScanner
     public List<nint> Scan(AobPattern pattern, AobScanOptions? options = null, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(pattern);
-
         options ??= new();
-
-        if (pattern.Length == 0)
-            throw new ArgumentException("Pattern must contain at least one byte.", nameof(pattern));
-
-        nint chunkSize = options.ChunkSize > 0 ? options.ChunkSize : 256 * 1024;
-
-        if (pattern.Length >= chunkSize)
-            throw new ArgumentException("Pattern length cannot exceed chunk size. Increase ChunkSize in AobScanOptions.", nameof(pattern));
-
-        var matcher = _patternMatcherResolver.Resolve(pattern);
-        var rawRegions = _regionEnumerator.GetRegions(options.MinScanAddress, options.MaxScanAddress, options.MemoryAccess);
-        var mergedRegions = _memoryRangePlanner.MergeAdjacentRegions(rawRegions);
-        var scanChunks = _memoryRangePlanner.CreateScanChunks(mergedRegions, pattern.Length, chunkSize);
-
-        int initialCapacity = options.MaxResults > 0
-            ? Math.Min(1024, options.MaxResults)
-            : 1024;
-
-        var results = new List<nint>(initialCapacity);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-
-        var parallelOptions = new ParallelOptions
-        {
-            CancellationToken = cts.Token,
-            MaxDegreeOfParallelism = options.MaxDegreeOfParallelism > 0
-                ? options.MaxDegreeOfParallelism
-                : -1
-        };
-
-        Parallel.ForEach(
-            scanChunks,
-            parallelOptions,
-            () => new List<nint>(64),
-            (chunk, state, localResults) =>
-            {
-                if (cts.IsCancellationRequested)
-                {
-                    state.Stop();
-                    return localResults;
-                }
-
-                int chunkBufSize = (int)chunk.Size;
-                byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(chunkBufSize);
-                Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
-
-                try
-                {
-                    if (_memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out _))
-                        matcher.ScanChunk(chunk, pattern, localResults, buffer);
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(rentedBuffer);
-                }
-
-                return localResults;
-            },
-            localResults =>
-            {
-                if (localResults.Count == 0)
-                    return;
-
-                lock (_syncRoot)
-                {
-                    if (options.MaxResults > 0)
-                    {
-                        int remaining = options.MaxResults - results.Count;
-                        if (remaining <= 0)
-                            return;
-
-                        int take = Math.Min(remaining, localResults.Count);
-                        results.AddRange(localResults.GetRange(0, take));
-
-                        if (results.Count >= options.MaxResults)
-                            cts.Cancel();
-                    }
-                    else
-                    {
-                        results.AddRange(localResults);
-                    }
-                }
-            });
-
-        return results;
+        return _scanOrchestrator.Scan(pattern, options, ct);
     }
 
     public nint? ScanFirst(AobPattern pattern, AobScanOptions? options = null, CancellationToken ct = default)

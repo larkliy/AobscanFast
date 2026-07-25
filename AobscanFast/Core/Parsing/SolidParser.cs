@@ -7,6 +7,13 @@ namespace AobscanFast.Core.Parsing;
 
 internal class SolidParser : IPatternParser
 {
+    public bool CanParse(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return false;
+        return !input.Contains('?');
+    }
+
     public AobPattern Parse(string input)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(input);
