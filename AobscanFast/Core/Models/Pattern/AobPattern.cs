@@ -17,9 +17,9 @@ public sealed class AobPattern
         SearchSequenceOffset = searchSequenceOffset;
     }
 
-    public byte[] Bytes => (byte[])_bytes.Clone();
-    public byte[]? Mask => _mask is null ? null : (byte[])_mask.Clone();
-    public byte[]? SearchSequence => _searchSequence is null ? null : (byte[])_searchSequence.Clone();
+    public ReadOnlyMemory<byte> Bytes => _bytes;
+    public ReadOnlyMemory<byte> Mask => _mask;
+    public ReadOnlyMemory<byte> SearchSequence => _searchSequence;
     public int SearchSequenceOffset { get; }
     public int Length => _bytes.Length;
 
