@@ -12,6 +12,33 @@ public class AobPatternTests
     }
 
     [Fact]
+    public void FromBytes_InvalidInput_Throws()
+    {
+        Assert.Throws<ArgumentNullException>(() => AobPattern.FromBytes(null!));
+        Assert.Throws<ArgumentException>(() => AobPattern.FromBytes([]));
+        Assert.Throws<ArgumentException>(() => AobPattern.FromBytes([0xAA], []));
+        Assert.Throws<ArgumentException>(() => AobPattern.FromBytes([0xF0], [0x0F]));
+    }
+
+    [Fact]
+    public void FromBytes_ClonesInputsAndReturnedArrays()
+    {
+        byte[] bytes = [0xAA, 0x00];
+        byte[] mask = [0xFF, 0x00];
+        var pattern = AobPattern.FromBytes(bytes, mask);
+
+        bytes[0] = 0;
+        mask[0] = 0;
+        pattern.Bytes[0] = 0;
+        pattern.Mask![0] = 0;
+        pattern.SearchSequence![0] = 0;
+
+        Assert.Equal(new byte[] { 0xAA, 0x00 }, pattern.Bytes);
+        Assert.Equal(new byte[] { 0xFF, 0x00 }, pattern.Mask);
+        Assert.Equal(new byte[] { 0xAA }, pattern.SearchSequence);
+    }
+
+    [Fact]
     public void Parse_SolidPattern_BytesParsedCorrectly()
     {
         var pattern = ParsePattern("AA BB CC DD");

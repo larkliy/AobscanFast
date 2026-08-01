@@ -40,7 +40,10 @@ public sealed class AobScanner
     }
 
     public nint? ScanFirst(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
-        => GetFirstOrNull(Scan(patternInput, options, ct));
+    {
+        var parser = _patternParserResolver.Resolve(patternInput);
+        return ScanFirst(parser.Parse(patternInput), options, ct);
+    }
 
     public List<nint> ScanModule(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
     {
@@ -49,7 +52,10 @@ public sealed class AobScanner
     }
 
     public nint? ScanModuleFirst(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
-        => GetFirstOrNull(ScanModule(processId, moduleName, patternInput, ct));
+    {
+        var parser = _patternParserResolver.Resolve(patternInput);
+        return ScanModuleFirst(processId, moduleName, parser.Parse(patternInput), ct);
+    }
 
     public List<nint> ScanModule(uint processId, string moduleName, AobPattern pattern, CancellationToken ct = default)
     {
@@ -65,13 +71,28 @@ public sealed class AobScanner
             new AobScanOptions
             {
                 MinScanAddress = moduleInfo.Value.BaseAddress,
-                MaxScanAddress = moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size
+                MaxScanAddress = checked(moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size)
             },
             ct);
     }
 
     public nint? ScanModuleFirst(uint processId, string moduleName, AobPattern pattern, CancellationToken ct = default)
-        => GetFirstOrNull(ScanModule(processId, moduleName, pattern, ct));
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+
+        var moduleInfo = _processHandler.GetModuleInfo(processId, moduleName);
+        if (moduleInfo is null)
+            return null;
+
+        return _scanOrchestrator.ScanFirst(
+            pattern,
+            new AobScanOptions
+            {
+                MinScanAddress = moduleInfo.Value.BaseAddress,
+                MaxScanAddress = checked(moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size)
+            },
+            ct);
+    }
 
     public List<nint> Scan(AobPattern pattern, AobScanOptions? options = null, CancellationToken ct = default)
     {
@@ -81,8 +102,9 @@ public sealed class AobScanner
     }
 
     public nint? ScanFirst(AobPattern pattern, AobScanOptions? options = null, CancellationToken ct = default)
-        => GetFirstOrNull(Scan(pattern, options, ct));
-
-    private static nint? GetFirstOrNull(List<nint> results)
-        => results.Count > 0 ? results[0] : null;
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        options ??= new();
+        return _scanOrchestrator.ScanFirst(pattern, options, ct);
+    }
 }

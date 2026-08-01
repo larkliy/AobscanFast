@@ -5,12 +5,16 @@ namespace AobscanFast.Infrastructure.Linux;
 
 public sealed class RemoteProcessMemoryAccessor : IMemoryAccessor
 {
-    private readonly int _fd;
+    private readonly SafeHandle _handle;
 
     public RemoteProcessMemoryAccessor(SafeHandle handle)
     {
         ArgumentNullException.ThrowIfNull(handle);
-        _fd = (int)handle.DangerousGetHandle();
+
+        if (handle.IsInvalid || handle.IsClosed)
+            throw new ArgumentException("A valid open process handle is required.", nameof(handle));
+
+        _handle = handle;
     }
 
     public unsafe bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
@@ -23,14 +27,29 @@ public sealed class RemoteProcessMemoryAccessor : IMemoryAccessor
 
         fixed (byte* buf = buffer)
         {
-            long result = NativeMethods.pread(_fd, buf, (nuint)buffer.Length, (long)baseAddress);
-            if (result < 0)
+            int total = 0;
+            while (total < buffer.Length)
             {
-                bytesRead = 0;
+                long result = NativeMethods.pread(
+                    _handle,
+                    buf + total,
+                    (nuint)(buffer.Length - total),
+                    checked((long)baseAddress + total));
+
+                if (result > 0)
+                {
+                    total = checked(total + (int)result);
+                    continue;
+                }
+
+                if (result < 0 && Marshal.GetLastPInvokeError() == NativeMethods.EINTR)
+                    continue;
+
+                bytesRead = (nuint)total;
                 return false;
             }
 
-            bytesRead = (nuint)result;
+            bytesRead = (nuint)total;
             return true;
         }
     }
@@ -45,14 +64,29 @@ public sealed class RemoteProcessMemoryAccessor : IMemoryAccessor
 
         fixed (byte* buf = buffer)
         {
-            long result = NativeMethods.pwrite(_fd, buf, (nuint)buffer.Length, (long)baseAddress);
-            if (result < 0)
+            int total = 0;
+            while (total < buffer.Length)
             {
-                bytesWritten = 0;
+                long result = NativeMethods.pwrite(
+                    _handle,
+                    buf + total,
+                    (nuint)(buffer.Length - total),
+                    checked((long)baseAddress + total));
+
+                if (result > 0)
+                {
+                    total = checked(total + (int)result);
+                    continue;
+                }
+
+                if (result < 0 && Marshal.GetLastPInvokeError() == NativeMethods.EINTR)
+                    continue;
+
+                bytesWritten = (nuint)total;
                 return false;
             }
 
-            bytesWritten = (nuint)result;
+            bytesWritten = (nuint)total;
             return true;
         }
     }

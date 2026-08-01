@@ -128,4 +128,19 @@ public class MaskMatcherTests
         Assert.Equal((nint)0x5000, results[0]);
         Assert.Equal((nint)0x5001, results[1]);
     }
+
+    [Theory]
+    [InlineData("?A", 0x1A, true)]
+    [InlineData("?A", 0x10, false)]
+    [InlineData("B?", 0xB7, true)]
+    [InlineData("B?", 0xA7, false)]
+    public void ScanChunk_HalfMaskWithoutSolidByte_IsMatchedCorrectly(string input, int value, bool expected)
+    {
+        var pattern = ParsePattern(input);
+        var results = new List<nint>();
+
+        _matcher.ScanChunk(new MemoryRange(0, 1), pattern, results, [(byte)value]);
+
+        Assert.Equal(expected, results.Count == 1);
+    }
 }

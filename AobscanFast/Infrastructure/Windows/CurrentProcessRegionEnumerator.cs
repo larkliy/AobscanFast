@@ -16,10 +16,18 @@ public sealed class CurrentProcessRegionEnumerator : IMemoryRegionEnumerator
             if (PInvoke.VirtualQuery(currentAddress.ToPointer(), out var memoryInfo) == 0)
                 break;
 
-            if (WindowsMemoryProtectionEvaluator.IsScannable(memoryInfo, access))
-                regions.Add(new MemoryRange((nint)memoryInfo.BaseAddress, (nint)memoryInfo.RegionSize));
+            nint regionStart = (nint)memoryInfo.BaseAddress;
+            nint regionEnd = checked(regionStart + (nint)memoryInfo.RegionSize);
+            nint scanStart = Math.Max(regionStart, minAddress);
+            nint scanEnd = Math.Min(regionEnd, maxAddress);
 
-            currentAddress = (nint)memoryInfo.BaseAddress + (nint)memoryInfo.RegionSize;
+            if (scanEnd > scanStart && WindowsMemoryProtectionEvaluator.IsScannable(memoryInfo, access))
+                regions.Add(new MemoryRange(scanStart, scanEnd - scanStart));
+
+            if (regionEnd <= currentAddress)
+                break;
+
+            currentAddress = regionEnd;
         }
 
         return regions;

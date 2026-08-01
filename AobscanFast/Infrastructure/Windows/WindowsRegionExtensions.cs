@@ -11,8 +11,10 @@ internal static class WindowsRegionExtensions
         public bool IsReadableRegion()
         => (mbi.Protect & PAGE_READONLY) != 0 ||
         (mbi.Protect & PAGE_READWRITE) != 0 ||
+        (mbi.Protect & PAGE_WRITECOPY) != 0 ||
         (mbi.Protect & PAGE_EXECUTE_READ) != 0 ||
-        (mbi.Protect & PAGE_EXECUTE_READWRITE) != 0;
+        (mbi.Protect & PAGE_EXECUTE_READWRITE) != 0 ||
+        (mbi.Protect & PAGE_EXECUTE_WRITECOPY) != 0;
 
         public bool IsWritableRegion()
             => (mbi.Protect & PAGE_READWRITE) != 0 ||

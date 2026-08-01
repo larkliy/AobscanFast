@@ -16,14 +16,16 @@ public sealed class RegionProcessor : IMemoryRangePlanner
         if (chunkSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(chunkSize), "Chunk size must be greater than zero.");
 
-        if (patternLength >= chunkSize)
+        if (patternLength > chunkSize)
             throw new ArgumentException("Pattern length cannot exceed chunk size", nameof(patternLength));
 
-        var result = new List<MemoryRange>(ranges.Count * 5);
+        var result = new List<MemoryRange>(ranges.Count);
         nint overlap = patternLength - 1;
 
         foreach (ref readonly var range in CollectionsMarshal.AsSpan(ranges))
         {
+            ValidateRange(range, nameof(ranges));
+
             nint currentAddress = range.BaseAddress;
             nint remainingBytes = range.Size;
 
@@ -37,7 +39,7 @@ public sealed class RegionProcessor : IMemoryRangePlanner
                     break;
 
                 nint advance = chunkLength - overlap;
-                currentAddress += advance;
+                currentAddress = checked(currentAddress + advance);
                 remainingBytes -= advance;
             }
         }
@@ -55,6 +57,9 @@ public sealed class RegionProcessor : IMemoryRangePlanner
         var sorted = new List<MemoryRange>(regions);
         sorted.Sort((a, b) => a.BaseAddress.CompareTo(b.BaseAddress));
 
+        foreach (ref readonly var range in CollectionsMarshal.AsSpan(sorted))
+            ValidateRange(range, nameof(regions));
+
         var span = CollectionsMarshal.AsSpan(sorted);
         var result = new List<MemoryRange>(sorted.Count);
         MemoryRange currentRange = span[0];
@@ -63,12 +68,13 @@ public sealed class RegionProcessor : IMemoryRangePlanner
         {
             ref readonly var nextRange = ref span[i];
 
-            if (currentRange.BaseAddress + currentRange.Size >= nextRange.BaseAddress)
-            {
-                nint mergedSize = Math.Max(
-                    currentRange.Size,
-                    nextRange.BaseAddress - currentRange.BaseAddress + nextRange.Size);
+            nint currentEnd = checked(currentRange.BaseAddress + currentRange.Size);
+            nint nextEnd = checked(nextRange.BaseAddress + nextRange.Size);
 
+            if (currentEnd >= nextRange.BaseAddress)
+            {
+                nint mergedEnd = Math.Max(currentEnd, nextEnd);
+                nint mergedSize = checked(mergedEnd - currentRange.BaseAddress);
                 currentRange = new MemoryRange(currentRange.BaseAddress, mergedSize);
             }
             else
@@ -81,5 +87,20 @@ public sealed class RegionProcessor : IMemoryRangePlanner
         result.Add(currentRange);
 
         return result;
+    }
+
+    private static void ValidateRange(in MemoryRange range, string parameterName)
+    {
+        if (range.Size < 0)
+            throw new ArgumentException("Memory range size cannot be negative.", parameterName);
+
+        try
+        {
+            _ = checked(range.BaseAddress + range.Size);
+        }
+        catch (OverflowException ex)
+        {
+            throw new ArgumentException("Memory range end address is outside the native integer range.", parameterName, ex);
+        }
     }
 }

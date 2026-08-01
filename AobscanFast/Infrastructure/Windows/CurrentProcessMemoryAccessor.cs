@@ -1,4 +1,5 @@
 using AobscanFast.Core.Interfaces;
+using AobscanFast.Core.Models;
 using Windows.Win32;
 using Windows.Win32.System.Memory;
 
@@ -23,7 +24,7 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
             return false;
         }
 
-        if (!IsMemoryReadable(baseAddress, buffer.Length))
+        if (!IsMemoryAccessible(baseAddress, buffer.Length, MemoryAccess.Readable))
         {
             bytesRead = 0;
             return false;
@@ -48,7 +49,7 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
             return false;
         }
 
-        if (!IsMemoryReadable(baseAddress, buffer.Length))
+        if (!IsMemoryAccessible(baseAddress, buffer.Length, MemoryAccess.Writable))
         {
             bytesWritten = 0;
             return false;
@@ -59,24 +60,27 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
         return true;
     }
 
-    private static bool IsMemoryReadable(nint address, int length)
+    private static bool IsMemoryAccessible(nint address, int length, MemoryAccess requiredAccess)
     {
-        if (PInvoke.VirtualQuery(address.ToPointer(), out var mbi) == 0)
-            return false;
+        ulong current = (ulong)address;
+        ulong requestedEnd = checked(current + (ulong)length);
 
-        if (mbi.State != MEM_COMMIT)
-            return false;
+        while (current < requestedEnd)
+        {
+            if (PInvoke.VirtualQuery((void*)current, out var mbi) == 0)
+                return false;
 
-        var protect = mbi.Protect;
-        if ((protect & PAGE_NOACCESS) != 0)
-            return false;
+            if (!WindowsMemoryProtectionEvaluator.IsScannable(mbi, requiredAccess))
+                return false;
 
-        if ((protect & PAGE_GUARD) != 0)
-            return false;
+            ulong regionStart = (ulong)mbi.BaseAddress;
+            ulong regionEnd = checked(regionStart + mbi.RegionSize);
+            if (current < regionStart || regionEnd <= current)
+                return false;
 
-        ulong regionEnd = (ulong)mbi.BaseAddress + mbi.RegionSize;
-        ulong requestedEnd = (ulong)address + (ulong)length;
+            current = Math.Min(regionEnd, requestedEnd);
+        }
 
-        return requestedEnd <= regionEnd;
+        return true;
     }
 }

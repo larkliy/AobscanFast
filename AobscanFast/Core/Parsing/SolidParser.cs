@@ -41,10 +41,7 @@ internal class SolidParser : IPatternParser
             if (pos == 0)
                 throw new FormatException("Pattern must contain at least one byte token.");
 
-            return new AobPattern
-            {
-                Bytes = pBytes[..pos].ToArray()
-            };
+            return AobPattern.FromBytes(pBytes[..pos].ToArray());
         }
         finally
         {

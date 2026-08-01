@@ -14,7 +14,7 @@ internal sealed class SolidMatcher : IPatternMatcher
         while (true)
         {
             int hitIndex;
-            if ((hitIndex = remaining.IndexOf(pattern.Bytes)) == -1)
+            if ((hitIndex = remaining.IndexOf(pattern.BytesSpan)) == -1)
                 break;
 
             results.Add(range.BaseAddress + currentOffset + hitIndex);

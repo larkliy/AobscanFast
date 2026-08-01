@@ -99,7 +99,7 @@ public class HalfMaskParserTests
     {
         var pattern = _parser.Parse("? ? ?");
 
-        Assert.Empty(pattern.SearchSequence);
+        Assert.Empty(pattern.SearchSequence!);
         Assert.Equal(0, pattern.SearchSequenceOffset);
     }
 
@@ -127,5 +127,22 @@ public class HalfMaskParserTests
     {
         var ex = Assert.Throws<FormatException>(() => _parser.Parse("A?B"));
         Assert.Contains("Invalid half-mask token", ex.Message);
+    }
+
+    [Theory]
+    [InlineData("G?")]
+    [InlineData("?G")]
+    [InlineData("-?")]
+    [InlineData("?/")]
+    public void Parse_InvalidHexCharacter_ThrowsFormatException(string input)
+    {
+        Assert.Throws<FormatException>(() => _parser.Parse(input));
+    }
+
+    [Fact]
+    public void CanParse_InvalidCharacterAdjacentToWildcard_ReturnsFalse()
+    {
+        Assert.False(_parser.CanParse("?G"));
+        Assert.False(_parser.CanParse("G?"));
     }
 }

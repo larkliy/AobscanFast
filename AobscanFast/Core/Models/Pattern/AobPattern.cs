@@ -5,45 +5,64 @@ namespace AobscanFast.Core.Models.Pattern;
 
 public sealed class AobPattern
 {
-    public byte[] Bytes { get; init; } = [];
-    public byte[]? Mask { get; init; }
-    public byte[]? SearchSequence { get; init; }
-    public int SearchSequenceOffset { get; init; }
-    public int Length => Bytes.Length;
+    private readonly byte[] _bytes;
+    private readonly byte[]? _mask;
+    private readonly byte[]? _searchSequence;
 
-    public bool HasMask => Mask is not null;
+    private AobPattern(byte[] bytes, byte[]? mask, byte[]? searchSequence, int searchSequenceOffset)
+    {
+        _bytes = bytes;
+        _mask = mask;
+        _searchSequence = searchSequence;
+        SearchSequenceOffset = searchSequenceOffset;
+    }
+
+    public byte[] Bytes => (byte[])_bytes.Clone();
+    public byte[]? Mask => _mask is null ? null : (byte[])_mask.Clone();
+    public byte[]? SearchSequence => _searchSequence is null ? null : (byte[])_searchSequence.Clone();
+    public int SearchSequenceOffset { get; }
+    public int Length => _bytes.Length;
+
+    public bool HasMask => _mask is not null;
+
+    internal ReadOnlySpan<byte> BytesSpan => _bytes;
+    internal ReadOnlySpan<byte> MaskSpan => _mask;
+    internal ReadOnlySpan<byte> SearchSequenceSpan => _searchSequence;
 
     public static AobPattern FromBytes(byte[] input, byte[]? mask = null)
     {
-        if (mask is not null)
-        {
-            var (seq, offset) = ParserHelpers.FindLongestSolidRun(input, mask);
+        ArgumentNullException.ThrowIfNull(input);
 
-            return new AobPattern
-            {
-                Bytes = input,
-                Mask = mask,
-                SearchSequence = seq,
-                SearchSequenceOffset = offset
-            };
+        if (input.Length == 0)
+            throw new ArgumentException("Pattern must contain at least one byte.", nameof(input));
+
+        if (mask is not null && mask.Length != input.Length)
+            throw new ArgumentException("Mask length must match pattern length.", nameof(mask));
+
+        byte[] bytesCopy = (byte[])input.Clone();
+        byte[]? maskCopy = mask is null ? null : (byte[])mask.Clone();
+
+        if (maskCopy is null)
+            return new AobPattern(bytesCopy, null, null, 0);
+
+        for (int i = 0; i < bytesCopy.Length; i++)
+        {
+            if ((bytesCopy[i] & maskCopy[i]) != bytesCopy[i])
+                throw new ArgumentException("Pattern bytes cannot contain bits outside the mask.", nameof(input));
         }
 
-        return new AobPattern
-        {
-            Bytes = input,
-            Mask = mask
-        };
+        var (sequence, offset) = ParserHelpers.FindLongestSolidRun(bytesCopy, maskCopy);
+        return new AobPattern(bytesCopy, maskCopy, sequence, offset);
     }
 
     public static AobPattern FromString(string input, Encoding? encoding = null)
     {
+        ArgumentNullException.ThrowIfNull(input);
+
+        if (input.Length == 0)
+            throw new ArgumentException("Pattern must contain at least one character.", nameof(input));
+
         encoding ??= Encoding.UTF8;
-
-        byte[] convertedBytes = encoding.GetBytes(input);
-
-        return new()
-        {
-            Bytes = convertedBytes
-        };
+        return FromBytes(encoding.GetBytes(input));
     }
 }

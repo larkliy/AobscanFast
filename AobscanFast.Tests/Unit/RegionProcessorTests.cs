@@ -157,6 +157,32 @@ public class RegionProcessorTests
         var ranges = new List<MemoryRange> { new(0x1000, 1000) };
 
         Assert.Throws<ArgumentException>(
-            () => _planner.CreateScanChunks(ranges, 256 * 1024, 256 * 1024));
+            () => _planner.CreateScanChunks(ranges, 256 * 1024 + 1, 256 * 1024));
+    }
+
+    [Fact]
+    public void CreateMemoryChunks_PatternEqualsChunkSize_IsAllowed()
+    {
+        var result = _planner.CreateScanChunks([new(0x1000, 8)], 8, 8);
+
+        Assert.Single(result);
+        Assert.Equal(8, result[0].Size);
+    }
+
+    [Fact]
+    public void MergeRegions_OverlappingUnsorted_MergesWithoutShrinking()
+    {
+        var result = _planner.MergeAdjacentRegions([new(0x1080, 0x20), new(0x1000, 0x100)]);
+
+        Assert.Single(result);
+        Assert.Equal(0x1000, result[0].BaseAddress);
+        Assert.Equal(0x100, result[0].Size);
+    }
+
+    [Fact]
+    public void InvalidRanges_ThrowArgumentException()
+    {
+        Assert.Throws<ArgumentException>(() => _planner.MergeAdjacentRegions([new(0x1000, -1)]));
+        Assert.Throws<ArgumentException>(() => _planner.CreateScanChunks([new(nint.MaxValue, 1)], 1, 1));
     }
 }

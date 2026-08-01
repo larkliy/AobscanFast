@@ -1,5 +1,4 @@
-﻿using AobscanFast.Core.Helpers;
-using AobscanFast.Core.Interfaces;
+﻿using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models.Pattern;
 using System.Buffers;
 using System.Runtime.CompilerServices;
@@ -19,8 +18,8 @@ internal class HalfMaskParser : IPatternParser
             if (span[i] != '?')
                 continue;
 
-            bool prevIsHex = i > 0 && span[i - 1] != ' ' && span[i - 1] != '?';
-            bool nextIsHex = i < span.Length - 1 && span[i + 1] != ' ' && span[i + 1] != '?';
+            bool prevIsHex = i > 0 && char.IsAsciiHexDigit(span[i - 1]);
+            bool nextIsHex = i < span.Length - 1 && char.IsAsciiHexDigit(span[i + 1]);
 
             if (prevIsHex || nextIsHex)
                 return true;
@@ -64,15 +63,7 @@ internal class HalfMaskParser : IPatternParser
             var finalBytes = pBytes[..length].ToArray();
             var finalMask = pMask[..length].ToArray();
 
-            var (bestSeq, offset) = ParserHelpers.FindLongestSolidRun(finalBytes, finalMask);
-
-            return new AobPattern
-            {
-                Bytes = finalBytes,
-                Mask = finalMask,
-                SearchSequence = bestSeq,
-                SearchSequenceOffset = offset
-            };
+            return AobPattern.FromBytes(finalBytes, finalMask);
         }
         finally
         {
@@ -116,6 +107,9 @@ internal class HalfMaskParser : IPatternParser
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static int CharToHex(char c)
     {
+        if (!char.IsAsciiHexDigit(c))
+            throw new FormatException($"Invalid hexadecimal character '{c}'.");
+
         int val = c;
         return (val > '9') ? (val & ~0x20) - 'A' + 10 : (val - '0');
     }

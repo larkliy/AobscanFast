@@ -1,5 +1,4 @@
-﻿using AobscanFast.Core.Helpers;
-using AobscanFast.Core.Interfaces;
+﻿using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models.Pattern;
 using System.Buffers;
 using System.Globalization;
@@ -56,15 +55,7 @@ internal class MaskParser : IPatternParser
             var finalBytes = pBytes[..length].ToArray();
             var finalMask = pMask[..length].ToArray();
 
-            var (bestSeq, offset) = ParserHelpers.FindLongestSolidRun(finalBytes, finalMask);
-
-            return new AobPattern
-            {
-                Bytes = finalBytes,
-                Mask = finalMask,
-                SearchSequence = bestSeq,
-                SearchSequenceOffset = offset
-            };
+            return AobPattern.FromBytes(finalBytes, finalMask);
         }
         finally
         {

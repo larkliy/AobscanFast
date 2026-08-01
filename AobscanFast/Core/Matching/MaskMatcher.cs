@@ -12,13 +12,15 @@ namespace AobscanFast.Core.Matching
         public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer)
         {
             int lastValidPatternStart = (int)(range.Size - pattern.Length);
-            ReadOnlySpan<byte> searchSequence = pattern.SearchSequence ?? [];
+            ReadOnlySpan<byte> searchSequence = pattern.SearchSequenceSpan;
 
             if (searchSequence.Length == 0)
             {
+                bool isFullyWildcard = pattern.MaskSpan.IndexOfAnyExcept((byte)0) < 0;
                 for (int patternStart = 0; patternStart <= lastValidPatternStart; patternStart++)
                 {
-                    results.Add(range.BaseAddress + patternStart);
+                    if (isFullyWildcard || IsMatch(pattern, buffer.Slice(patternStart, pattern.Length)))
+                        results.Add(range.BaseAddress + patternStart);
                 }
 
                 return;
@@ -59,11 +61,12 @@ namespace AobscanFast.Core.Matching
             if ((nuint)data.Length < length)
                 return false;
 
-            if (pattern.Mask is null)
+            ReadOnlySpan<byte> mask = pattern.MaskSpan;
+            if (mask.IsEmpty)
                 return false;
 
-            ref byte pBytes = ref MemoryMarshal.GetArrayDataReference(pattern.Bytes);
-            ref byte pMask = ref MemoryMarshal.GetArrayDataReference(pattern.Mask);
+            ref byte pBytes = ref MemoryMarshal.GetReference(pattern.BytesSpan);
+            ref byte pMask = ref MemoryMarshal.GetReference(mask);
             ref byte pData = ref MemoryMarshal.GetReference(data);
 
             nuint i = 0;

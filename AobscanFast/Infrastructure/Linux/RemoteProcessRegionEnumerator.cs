@@ -11,7 +11,11 @@ public sealed class RemoteProcessRegionEnumerator : IMemoryRegionEnumerator
     public RemoteProcessRegionEnumerator(SafeHandle handle)
     {
         ArgumentNullException.ThrowIfNull(handle);
-        _processId = ((SafeProcessHandle)handle).ProcessId;
+
+        if (handle is not SafeProcessHandle processHandle || processHandle.IsInvalid || processHandle.IsClosed)
+            throw new ArgumentException("A Linux process handle created by LinuxProcessHandler is required.", nameof(handle));
+
+        _processId = processHandle.ProcessId;
     }
 
     public List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
