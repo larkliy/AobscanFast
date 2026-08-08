@@ -42,13 +42,16 @@
 
 ## Installation
 
+Install from NuGet:
+
 ```bash
-git clone https://github.com/larkliy/AobscanFast.git
+dotnet add package AobscanFast
 ```
 
-Or add a project reference:
+Or for local development, clone and add a project reference:
 
 ```bash
+git clone https://github.com/larkliy/AobscanFast.git
 dotnet add reference AobscanFast/AobscanFast.csproj
 ```
 
