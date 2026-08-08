@@ -16,10 +16,12 @@
 		<RepositoryUrl>https://github.com/larkliy/AobscanFast</RepositoryUrl>
 		<PackageTags>memory;scan;aob;pattern;simd</PackageTags>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageIcon>icon.png</PackageIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<None Include="..\README.md" Pack="true" PackagePath="\" />
+		<None Include="icon.png" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 	<ItemGroup>
