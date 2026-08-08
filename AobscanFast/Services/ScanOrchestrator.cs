@@ -5,6 +5,7 @@ using System.Buffers;
 
 namespace AobscanFast.Services;
 
+/// <summary>Coordinates memory enumeration, chunking, reads, matching, and cancellation.</summary>
 public sealed class ScanOrchestrator
 {
     private readonly IMemoryRegionEnumerator _regionEnumerator;
@@ -12,6 +13,8 @@ public sealed class ScanOrchestrator
     private readonly IPatternMatcherResolver _patternMatcherResolver;
     private readonly IMemoryRangePlanner _memoryRangePlanner;
 
+    /// <summary>Initializes a scan coordinator with its required services.</summary>
+    /// <param name="regionEnumerator">The region enumerator.</param><param name="memoryAccessor">The memory accessor.</param><param name="patternMatcherResolver">The pattern matcher resolver.</param><param name="memoryRangePlanner">The range planner.</param>
     public ScanOrchestrator(
         IMemoryRegionEnumerator regionEnumerator,
         IMemoryAccessor memoryAccessor,
@@ -24,9 +27,13 @@ public sealed class ScanOrchestrator
         _memoryRangePlanner = memoryRangePlanner ?? throw new ArgumentNullException(nameof(memoryRangePlanner));
     }
 
+    /// <summary>Scans memory and returns matching addresses.</summary>
+    /// <param name="pattern">The compiled pattern.</param><param name="options">The scan options.</param><param name="ct">A cancellation token.</param><returns>Matching addresses.</returns>
     public List<nint> Scan(AobPattern pattern, AobScanOptions options, CancellationToken ct)
         => ScanCore(pattern, options, options?.MaxResults ?? 0, ct);
 
+    /// <summary>Scans memory and returns the first matching address.</summary>
+    /// <param name="pattern">The compiled pattern.</param><param name="options">The scan options.</param><param name="ct">A cancellation token.</param><returns>A matching address, or <see langword="null"/> when none exists.</returns>
     public nint? ScanFirst(AobPattern pattern, AobScanOptions options, CancellationToken ct)
     {
         List<nint> results = ScanCore(pattern, options, 1, ct);

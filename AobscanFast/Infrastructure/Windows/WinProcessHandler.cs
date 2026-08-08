@@ -7,8 +7,10 @@ using Windows.Win32.System.Diagnostics.ToolHelp;
 
 namespace AobscanFast.Infrastructure.Windows;
 
+/// <summary>Provides process and module operations using the Windows Tool Help API.</summary>
 public class WinProcessHandler : IProcessHandler
 {
+    /// <inheritdoc/>
     public uint? FindIdByName(string processName, int index = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(processName);
@@ -36,6 +38,7 @@ public class WinProcessHandler : IProcessHandler
         return null;
     }
 
+    /// <inheritdoc/>
     public unsafe (nint BaseAddress, uint Size)? GetModuleInfo(uint processId, string moduleName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleName);
@@ -59,6 +62,7 @@ public class WinProcessHandler : IProcessHandler
         return null;
     }
 
+    /// <inheritdoc/>
     public SafeHandle OpenProcess(uint processId)
     {
         return PInvoke.OpenProcess_SafeHandle(

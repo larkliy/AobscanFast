@@ -4,8 +4,10 @@ using AobscanFast.Core.Interfaces;
 
 namespace AobscanFast.Infrastructure.Linux;
 
+/// <summary>Provides process and module operations using Linux procfs.</summary>
 public class LinuxProcessHandler : IProcessHandler
 {
+    /// <inheritdoc/>
     public uint? FindIdByName(string processName, int index = 0)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(processName);
@@ -46,6 +48,7 @@ public class LinuxProcessHandler : IProcessHandler
         return null;
     }
 
+    /// <inheritdoc/>
     public unsafe (nint BaseAddress, uint Size)? GetModuleInfo(uint processId, string moduleName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleName);
@@ -102,6 +105,7 @@ public class LinuxProcessHandler : IProcessHandler
         return (baseAddress.Value, (uint)(lastEnd - baseAddress.Value));
     }
 
+    /// <inheritdoc/>
     public SafeHandle OpenProcess(uint processId)
     {
         string path = $"/proc/{processId}/mem";

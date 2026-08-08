@@ -5,8 +5,10 @@ using Windows.Win32;
 
 namespace AobscanFast.Infrastructure.Windows;
 
+/// <summary>Enumerates accessible regions in a remote Windows process.</summary>
 public sealed class RemoteProcessRegionEnumerator(SafeHandle processHandle) : IMemoryRegionEnumerator
 {
+    /// <inheritdoc/>
     public unsafe List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
     {
         nint currentAddress = minAddress;

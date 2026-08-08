@@ -3,10 +3,12 @@ using System.Runtime.InteropServices;
 
 namespace AobscanFast.Infrastructure.Linux;
 
+/// <summary>Reads and writes a remote Linux process through its process handle.</summary>
 public sealed class RemoteProcessMemoryAccessor : IMemoryAccessor
 {
     private readonly SafeHandle _handle;
 
+    /// <summary>Initializes an accessor for an open Linux process handle.</summary><param name="handle">The process handle.</param>
     public RemoteProcessMemoryAccessor(SafeHandle handle)
     {
         ArgumentNullException.ThrowIfNull(handle);
@@ -17,6 +19,7 @@ public sealed class RemoteProcessMemoryAccessor : IMemoryAccessor
         _handle = handle;
     }
 
+    /// <inheritdoc/>
     public unsafe bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
     {
         if (buffer.IsEmpty)
@@ -54,6 +57,7 @@ public sealed class RemoteProcessMemoryAccessor : IMemoryAccessor
         }
     }
 
+    /// <inheritdoc/>
     public unsafe bool WriteMemory(nint baseAddress, ReadOnlySpan<byte> buffer, out nuint bytesWritten)
     {
         if (buffer.IsEmpty)

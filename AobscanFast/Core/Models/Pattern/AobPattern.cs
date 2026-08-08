@@ -3,6 +3,7 @@ using System.Text;
 
 namespace AobscanFast.Core.Models.Pattern;
 
+/// <summary>Represents a byte pattern and its optional bit mask.</summary>
 public sealed class AobPattern
 {
     private readonly byte[] _bytes;
@@ -17,19 +18,31 @@ public sealed class AobPattern
         SearchSequenceOffset = searchSequenceOffset;
     }
 
-    public ReadOnlyMemory<byte> Bytes => _bytes;
-    public ReadOnlyMemory<byte> Mask => _mask;
-    public ReadOnlyMemory<byte> SearchSequence => _searchSequence;
-    public int SearchSequenceOffset { get; }
-    public int Length => _bytes.Length;
+	/// <summary>Gets the pattern bytes. The returned memory cannot mutate the pattern.</summary>
+	public ReadOnlyMemory<byte> Bytes => _bytes;
+	/// <summary>Gets the optional mask, or an empty memory value for an unmasked pattern.</summary>
+	public ReadOnlyMemory<byte> Mask => _mask;
+	/// <summary>Gets the longest contiguous fully specified byte sequence used as a search prefilter.</summary>
+	public ReadOnlyMemory<byte> SearchSequence => _searchSequence;
+	/// <summary>Gets the offset of <see cref="SearchSequence"/> within <see cref="Bytes"/>.</summary>
+	public int SearchSequenceOffset { get; }
+	/// <summary>Gets the number of bytes in the pattern.</summary>
+	public int Length => _bytes.Length;
 
-    public bool HasMask => _mask is not null;
+	/// <summary>Gets a value indicating whether this pattern has a mask.</summary>
+	public bool HasMask => _mask is not null;
 
     internal ReadOnlySpan<byte> BytesSpan => _bytes;
     internal ReadOnlySpan<byte> MaskSpan => _mask;
     internal ReadOnlySpan<byte> SearchSequenceSpan => _searchSequence;
 
-    public static AobPattern FromBytes(byte[] input, byte[]? mask = null)
+	/// <summary>Creates a pattern from bytes and an optional bit mask.</summary>
+	/// <param name="input">The pattern bytes. The array is copied.</param>
+	/// <param name="mask">An optional mask with the same length as <paramref name="input"/>. Set bits are matched.</param>
+	/// <returns>A new immutable <see cref="AobPattern"/>.</returns>
+	/// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
+	/// <exception cref="ArgumentException">The input is empty, the mask length differs, or input contains bits outside the mask.</exception>
+	public static AobPattern FromBytes(byte[] input, byte[]? mask = null)
     {
         ArgumentNullException.ThrowIfNull(input);
 
@@ -55,7 +68,13 @@ public sealed class AobPattern
         return new AobPattern(bytesCopy, maskCopy, sequence, offset);
     }
 
-    public static AobPattern FromString(string input, Encoding? encoding = null)
+	/// <summary>Creates an exact byte pattern from the encoded text.</summary>
+	/// <param name="input">The text to encode.</param>
+	/// <param name="encoding">The encoding to use, or UTF-8 when omitted.</param>
+	/// <returns>A new unmasked <see cref="AobPattern"/>.</returns>
+	/// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
+	/// <exception cref="ArgumentException"><paramref name="input"/> is empty.</exception>
+	public static AobPattern FromString(string input, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(input);
 

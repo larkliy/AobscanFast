@@ -4,8 +4,10 @@ using System.Runtime.InteropServices;
 
 namespace AobscanFast.Core.Helpers;
 
+/// <summary>Provides default memory range merging and chunk planning.</summary>
 public sealed class RegionProcessor : IMemoryRangePlanner
 {
+    /// <inheritdoc/>
     public List<MemoryRange> CreateScanChunks(List<MemoryRange> ranges, int patternLength, nint chunkSize)
     {
         ArgumentNullException.ThrowIfNull(ranges);
@@ -47,6 +49,7 @@ public sealed class RegionProcessor : IMemoryRangePlanner
         return result;
     }
 
+    /// <inheritdoc/>
     public List<MemoryRange> MergeAdjacentRegions(List<MemoryRange> regions)
     {
         ArgumentNullException.ThrowIfNull(regions);

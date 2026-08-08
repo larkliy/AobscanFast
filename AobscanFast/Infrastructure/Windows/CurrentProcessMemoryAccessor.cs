@@ -8,8 +8,10 @@ using static Windows.Win32.System.Memory.VIRTUAL_ALLOCATION_TYPE;
 
 namespace AobscanFast.Infrastructure.Windows;
 
+/// <summary>Reads and writes the current Windows process address space.</summary>
 public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
 {
+    /// <inheritdoc/>
     public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
     {
         if (buffer.IsEmpty)
@@ -35,6 +37,7 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
         return true;
     }
 
+    /// <inheritdoc/>
     public bool WriteMemory(nint baseAddress, ReadOnlySpan<byte> buffer, out nuint bytesWritten)
     {
         if (buffer.IsEmpty)

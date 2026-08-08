@@ -4,8 +4,10 @@ using Windows.Win32;
 
 namespace AobscanFast.Infrastructure.Windows;
 
+/// <summary>Enumerates committed, accessible regions in the current Windows process.</summary>
 public sealed class CurrentProcessRegionEnumerator : IMemoryRegionEnumerator
 {
+    /// <inheritdoc/>
     public unsafe List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
     {
         nint currentAddress = minAddress;
