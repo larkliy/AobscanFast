@@ -9,7 +9,7 @@ namespace AobscanFast.Core.Matching
 {
     internal sealed class MaskMatcher : IPatternMatcher
     {
-        public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer)
+        public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer, int maxResults = 0)
         {
             int lastValidPatternStart = (int)(range.Size - pattern.Length);
             ReadOnlySpan<byte> searchSequence = pattern.SearchSequenceSpan;
@@ -20,7 +20,11 @@ namespace AobscanFast.Core.Matching
                 for (int patternStart = 0; patternStart <= lastValidPatternStart; patternStart++)
                 {
                     if (isFullyWildcard || IsMatch(pattern, buffer.Slice(patternStart, pattern.Length)))
+                    {
                         results.Add(range.BaseAddress + patternStart);
+                        if (maxResults > 0 && results.Count >= maxResults)
+                            break;
+                    }
                 }
 
                 return;
@@ -46,7 +50,11 @@ namespace AobscanFast.Core.Matching
                 {
                     var candidateBytes = buffer.Slice(patternStartPos, pattern.Length);
                     if (IsMatch(pattern, candidateBytes))
+                    {
                         results.Add(range.BaseAddress + patternStartPos);
+                        if (maxResults > 0 && results.Count >= maxResults)
+                            break;
+                    }
                 }
 
                 currentOffset += hitIndex + 1;

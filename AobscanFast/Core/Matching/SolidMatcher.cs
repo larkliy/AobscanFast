@@ -6,7 +6,7 @@ namespace AobscanFast.Core.Matching;
 
 internal sealed class SolidMatcher : IPatternMatcher
 {
-    public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer)
+    public void ScanChunk(in MemoryRange range, AobPattern pattern, List<nint> results, ReadOnlySpan<byte> buffer, int maxResults = 0)
     {
         int currentOffset = 0;
         var remaining = buffer;
@@ -18,6 +18,8 @@ internal sealed class SolidMatcher : IPatternMatcher
                 break;
 
             results.Add(range.BaseAddress + currentOffset + hitIndex);
+            if (maxResults > 0 && results.Count >= maxResults)
+                break;
 
             int advance = hitIndex + 1;
             currentOffset += advance;

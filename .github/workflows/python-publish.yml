@@ -40,7 +40,7 @@ jobs:
       shell: pwsh
       run: |
         python -m pip install --force-reinstall (Get-ChildItem "dist/*-win_amd64.whl").FullName
-        python -c "import ctypes; from aobscanfast import AobScanner; marker=bytes.fromhex('DE AD BE EF 13 37 00 FF AA 11 22 33'); buffer=ctypes.create_string_buffer(marker); expected=ctypes.addressof(buffer); scanner=AobScanner(); hits=scanner.scan('DE AD BE EF 13 37 00 FF AA 11 22 33', batch_size=1); assert expected in hits; assert all(ctypes.string_at(hit, len(marker)) == marker for hit in hits)"
+        python tests/python_smoke.py
     - uses: actions/upload-artifact@v4
       with:
         name: python-wheel-windows
@@ -78,7 +78,7 @@ jobs:
     - name: Test Linux wheel
       run: |
         python -m pip install --force-reinstall repaired/*.whl
-        python -c "import ctypes; from aobscanfast import AobScanner; marker=bytes.fromhex('DE AD BE EF 13 37 00 FF AA 11 22 33'); buffer=ctypes.create_string_buffer(marker); expected=ctypes.addressof(buffer); scanner=AobScanner(); hits=scanner.scan('DE AD BE EF 13 37 00 FF AA 11 22 33', batch_size=1); assert expected in hits; assert all(ctypes.string_at(hit, len(marker)) == marker for hit in hits)"
+        python tests/python_smoke.py
     - uses: actions/upload-artifact@v4
       with:
         name: python-wheel-linux

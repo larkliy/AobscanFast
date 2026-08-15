@@ -52,12 +52,12 @@ class _Library:
         ]
         lib.aob_scan_module.restype = ctypes.c_int
         lib.aob_scan_module.argtypes = [
-            ctypes.c_int, ctypes.c_uint, ctypes.c_char_p, ctypes.c_char_p,
-            ctypes.c_int, c_uint64_p, ctypes.c_int, c_int_p,
+            ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p,
+            c_uint64_p, ctypes.c_int, c_int_p,
         ]
         lib.aob_scan_module_first.restype = ctypes.c_int
         lib.aob_scan_module_first.argtypes = [
-            ctypes.c_int, ctypes.c_uint, ctypes.c_char_p, ctypes.c_char_p,
+            ctypes.c_int, ctypes.c_char_p, ctypes.c_char_p,
             c_uint64_p,
         ]
         lib.aob_last_error.restype = ctypes.c_int
@@ -103,9 +103,27 @@ class AobScanner:
 
     def __del__(self) -> None:
         try:
-            self._lib._cdll.aob_scanner_destroy(self._handle)
+            self.close()
         except Exception:
             pass
+
+    def close(self) -> None:
+        """Release the native scanner and its operating-system resources."""
+        handle = getattr(self, "_handle", 0)
+        if handle:
+            self._lib._cdll.aob_scanner_destroy(handle)
+            self._handle = 0
+
+    def __enter__(self) -> AobScanner:
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
+
+    def _require_open(self) -> int:
+        if not self._handle:
+            raise AobError("scanner is closed")
+        return self._handle
 
     def scan(
         self, pattern: str, min_address: int = 0, max_address: int = 0,
@@ -125,18 +143,19 @@ class AobScanner:
         results: list[int] = []
         cursor = min_address
         pattern_bytes = pattern.encode("utf-8")
+        page_limit = min(batch_size, cap) if batch_size > 0 else cap
         while True:
             count = ctypes.c_int()
             rc = self._lib._cdll.aob_scan(
-                self._handle, pattern_bytes, cursor, max_address, chunk_size,
+                self._require_open(), pattern_bytes, cursor, max_address, chunk_size,
                 max_parallel, batch_size, buffer, cap, ctypes.byref(count),
             )
             self._lib.check(rc)
             count_value = count.value
             results.extend(int(buffer[i]) for i in range(count_value))
-            if count_value < cap:
+            if count_value < page_limit:
                 return results
-            cursor = results[-1] + 1
+            cursor = max(int(buffer[i]) for i in range(count_value)) + 1
 
     def scan_first(
         self, pattern: str, min_address: int = 0, max_address: int = 0,
@@ -149,38 +168,40 @@ class AobScanner:
             raise ValueError("addresses must be >= 0")
         output = ctypes.c_uint64()
         rc = self._lib._cdll.aob_scan_first(
-            self._handle, pattern.encode("utf-8"), min_address, max_address,
+            self._require_open(), pattern.encode("utf-8"), min_address, max_address,
             chunk_size, max_parallel, ctypes.byref(output),
         )
         self._lib.check(rc)
         return int(output.value) if output.value else None
 
-    def scan_module(
-        self, pid: int, module: str, pattern: str, batch_size: int = 4096,
-        capacity: Optional[int] = None,
-    ) -> list[int]:
+    def scan_module(self, module: str, pattern: str) -> list[int]:
         """Scan a named module and return matching addresses."""
         if not module or not pattern:
             raise ValueError("module and pattern must not be empty")
-        cap = batch_size if capacity is None else capacity
-        if cap <= 0:
-            raise ValueError("capacity must be positive")
-        buffer = (ctypes.c_uint64 * cap)()
-        count = ctypes.c_int()
-        rc = self._lib._cdll.aob_scan_module(
-            self._handle, pid, module.encode(), pattern.encode(), batch_size,
-            buffer, cap, ctypes.byref(count),
-        )
-        self._lib.check(rc)
-        return [int(buffer[i]) for i in range(count.value)]
+        while True:
+            required = ctypes.c_int()
+            rc = self._lib._cdll.aob_scan_module(
+                self._require_open(), module.encode(), pattern.encode(),
+                None, 0, ctypes.byref(required),
+            )
+            self._lib.check(rc)
+            buffer = (ctypes.c_uint64 * max(required.value, 1))()
+            count = ctypes.c_int()
+            rc = self._lib._cdll.aob_scan_module(
+                self._require_open(), module.encode(), pattern.encode(),
+                buffer, len(buffer), ctypes.byref(count),
+            )
+            self._lib.check(rc)
+            if count.value <= len(buffer):
+                return [int(buffer[i]) for i in range(count.value)]
 
-    def scan_module_first(self, pid: int, module: str, pattern: str) -> Optional[int]:
+    def scan_module_first(self, module: str, pattern: str) -> Optional[int]:
         """Scan a named module and return the first matching address."""
         if not module or not pattern:
             raise ValueError("module and pattern must not be empty")
         output = ctypes.c_uint64()
         rc = self._lib._cdll.aob_scan_module_first(
-            self._handle, pid, module.encode(), pattern.encode(), ctypes.byref(output)
+            self._require_open(), module.encode(), pattern.encode(), ctypes.byref(output)
         )
         self._lib.check(rc)
         return int(output.value) if output.value else None

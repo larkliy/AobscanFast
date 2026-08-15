@@ -9,7 +9,8 @@ pip install aobscanfast
 ```python
 from aobscanfast import AobScanner
 
-scanner = AobScanner(pid=1234)
+with AobScanner(pid=1234) as scanner:
+    matches = scanner.scan("48 8B ?? ?? ?? AA")
 ```
 
 The package bundles the NativeAOT library for supported Windows and Linux x64 platforms.

@@ -2,7 +2,6 @@ using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
 using System.Buffers;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace AobscanFast.Services;
@@ -77,7 +76,7 @@ public sealed class ScanOrchestrator
         var parallelOptions = new ParallelOptions
         {
             CancellationToken = cts.Token,
-            MaxDegreeOfParallelism = _memoryAccessor is ISelfProcessMemoryAccessor
+            MaxDegreeOfParallelism = effectiveMaxResults > 0 || _memoryAccessor is ISelfProcessMemoryAccessor
                 ? 1
                 : options.MaxDegreeOfParallelism > 0
                 ? options.MaxDegreeOfParallelism
@@ -101,20 +100,35 @@ public sealed class ScanOrchestrator
                     int chunkBufSize = checked((int)chunk.Size);
 
                     byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(chunkBufSize);
-                    Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
-                    nint bufferAddress = (nint)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(rentedBuffer));
 
                     try
                     {
-                        _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
-                        if (bytesRead > (nuint)buffer.Length)
-                            throw new InvalidOperationException("Memory accessor returned more bytes than the supplied buffer can hold.");
-
-                        int validLength = checked((int)bytesRead);
-                        if (validLength >= pattern.Length)
+                        fixed (byte* bufferPointer = rentedBuffer)
                         {
-                            var actualRange = new MemoryRange(chunk.BaseAddress, validLength);
-                            matcher.ScanChunk(actualRange, pattern, chunkResults, buffer[..validLength]);
+                            Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
+                            nint bufferAddress = (nint)bufferPointer;
+                            if (_memoryAccessor is ISelfProcessMemoryAccessor &&
+                                IsRangeOverlap(chunk.BaseAddress, chunkBufSize, bufferAddress, rentedBuffer.Length))
+                            {
+                                return;
+                            }
+
+                            _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
+                            if (bytesRead > (nuint)buffer.Length)
+                                throw new InvalidOperationException("Memory accessor returned more bytes than the supplied buffer can hold.");
+
+                            int validLength = checked((int)bytesRead);
+                            if (validLength >= pattern.Length)
+                            {
+                                var actualRange = new MemoryRange(chunk.BaseAddress, validLength);
+                                int chunkResultLimit = effectiveMaxResults > 0
+                                    ? effectiveMaxResults - results.Count
+                                    : 0;
+                                matcher.ScanChunk(actualRange, pattern, chunkResults, buffer[..validLength], chunkResultLimit);
+                            }
+
+                            chunkResults.RemoveAll(address => IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length));
+                            chunkResults.RemoveAll(address => IsExcluded(address, pattern.Length, excludedRanges));
                         }
                     }
                     finally
@@ -123,9 +137,6 @@ public sealed class ScanOrchestrator
                             rentedBuffer,
                             clearArray: _memoryAccessor is ISelfProcessMemoryAccessor);
                     }
-
-                    chunkResults.RemoveAll(address => IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length));
-                    chunkResults.RemoveAll(address => IsExcluded(address, pattern.Length, excludedRanges));
 
                     if (chunkResults.Count == 0)
                         return;

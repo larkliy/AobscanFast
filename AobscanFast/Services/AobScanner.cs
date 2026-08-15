@@ -134,7 +134,7 @@ public sealed class AobScanner
             new AobScanOptions
             {
                 MinScanAddress = moduleInfo.Value.BaseAddress,
-                MaxScanAddress = checked(moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size)
+                MaxScanAddress = checked(moduleInfo.Value.BaseAddress + moduleInfo.Value.Size)
             },
             ct);
     }
@@ -155,7 +155,7 @@ public sealed class AobScanner
             new AobScanOptions
             {
                 MinScanAddress = moduleInfo.Value.BaseAddress,
-                MaxScanAddress = checked(moduleInfo.Value.BaseAddress + (nint)moduleInfo.Value.Size)
+                MaxScanAddress = checked(moduleInfo.Value.BaseAddress + moduleInfo.Value.Size)
             },
             ct);
     }

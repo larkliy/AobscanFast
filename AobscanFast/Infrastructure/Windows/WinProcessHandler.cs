@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Windows.Win32.System.Threading;
 using Windows.Win32.System.Diagnostics.ToolHelp;
+using System.ComponentModel;
 
 namespace AobscanFast.Infrastructure.Windows;
 
@@ -39,7 +40,7 @@ public class WinProcessHandler : IProcessHandler
     }
 
     /// <inheritdoc/>
-    public unsafe (nint BaseAddress, uint Size)? GetModuleInfo(uint processId, string moduleName)
+    public unsafe (nint BaseAddress, nint Size)? GetModuleInfo(uint processId, string moduleName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleName);
 
@@ -55,7 +56,7 @@ public class WinProcessHandler : IProcessHandler
         do
         {
             if (entry32.szModule.AsReadOnlySpan().SliceAtNull().Equals(moduleName, StringComparison.OrdinalIgnoreCase))
-                return ((nint)entry32.modBaseAddr, entry32.modBaseSize);
+                return ((nint)entry32.modBaseAddr, (nint)entry32.modBaseSize);
 
         } while (PInvoke.Module32NextW(hSnapshot, ref entry32));
 
@@ -65,12 +66,19 @@ public class WinProcessHandler : IProcessHandler
     /// <inheritdoc/>
     public SafeHandle OpenProcess(uint processId)
     {
-        return PInvoke.OpenProcess_SafeHandle(
+        SafeHandle handle = PInvoke.OpenProcess_SafeHandle(
             PROCESS_ACCESS_RIGHTS.PROCESS_QUERY_INFORMATION |
             PROCESS_ACCESS_RIGHTS.PROCESS_VM_OPERATION |
             PROCESS_ACCESS_RIGHTS.PROCESS_VM_READ |
             PROCESS_ACCESS_RIGHTS.PROCESS_VM_WRITE,
             false,
             processId);
+
+        if (!handle.IsInvalid)
+            return handle;
+
+        int error = Marshal.GetLastPInvokeError();
+        handle.Dispose();
+        throw new Win32Exception(error, $"Failed to open process {processId}.");
     }
 }

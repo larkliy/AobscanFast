@@ -13,7 +13,7 @@ internal sealed class NullProcessHandler : IProcessHandler
 
     public uint? FindIdByName(string processName, int index = 0) => throw CreateNotConfiguredException();
 
-    public (nint BaseAddress, uint Size)? GetModuleInfo(uint processId, string moduleName) => throw CreateNotConfiguredException();
+    public (nint BaseAddress, nint Size)? GetModuleInfo(uint processId, string moduleName) => throw CreateNotConfiguredException();
 
     public SafeHandle OpenProcess(uint processId) => throw CreateNotConfiguredException();
 

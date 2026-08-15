@@ -6,8 +6,20 @@ using Windows.Win32;
 namespace AobscanFast.Infrastructure.Windows;
 
 /// <summary>Enumerates accessible regions in a remote Windows process.</summary>
-public sealed class RemoteProcessRegionEnumerator(SafeHandle processHandle) : IMemoryRegionEnumerator
+public sealed class RemoteProcessRegionEnumerator : IMemoryRegionEnumerator
 {
+    private readonly SafeHandle _processHandle;
+
+    /// <summary>Initializes an enumerator for an open Windows process handle.</summary>
+    public RemoteProcessRegionEnumerator(SafeHandle processHandle)
+    {
+        ArgumentNullException.ThrowIfNull(processHandle);
+        if (processHandle.IsInvalid || processHandle.IsClosed)
+            throw new ArgumentException("A valid open process handle is required.", nameof(processHandle));
+
+        _processHandle = processHandle;
+    }
+
     /// <inheritdoc/>
     public unsafe List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
     {
@@ -16,7 +28,7 @@ public sealed class RemoteProcessRegionEnumerator(SafeHandle processHandle) : IM
 
         while (currentAddress < maxAddress)
         {
-            if (PInvoke.VirtualQueryEx(processHandle, currentAddress.ToPointer(), out var memoryInfo) == 0)
+            if (PInvoke.VirtualQueryEx(_processHandle, currentAddress.ToPointer(), out var memoryInfo) == 0)
                 break;
 
             nint regionStart = (nint)memoryInfo.BaseAddress;

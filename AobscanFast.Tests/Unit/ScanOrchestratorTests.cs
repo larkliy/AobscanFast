@@ -84,6 +84,20 @@ public class ScanOrchestratorTests
     }
 
     [Fact]
+    public void Scan_WithMaxResults_ReturnsMatchesInAddressOrder()
+    {
+        var accessor = new AddressPatternMemoryAccessor();
+        var orchestrator = CreateOrchestrator(accessor, [new(0x2000, 1), new(0x1000, 1)]);
+
+        var results = orchestrator.Scan(
+            AobPattern.FromBytes([0xAA]),
+            new AobScanOptions { ChunkSize = 1, MaxResults = 2, MaxDegreeOfParallelism = 4 },
+            default);
+
+        Assert.Equal([(nint)0x1000, (nint)0x2000], results);
+    }
+
+    [Fact]
     public void Scan_SelfProcessAccessor_UsesSequentialPooledReads()
     {
         var accessor = new SelfProcessTestMemoryAccessor([0x00, 0xAA, 0x00]);
@@ -132,6 +146,22 @@ public class ScanOrchestratorTests
             ReadCalls++;
             data.AsSpan(0, Math.Min(data.Length, buffer.Length)).CopyTo(buffer);
             bytesRead = (nuint)Math.Min(data.Length, buffer.Length);
+            return true;
+        }
+
+        public bool WriteMemory(nint baseAddress, ReadOnlySpan<byte> buffer, out nuint bytesWritten)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+    }
+
+    private sealed class AddressPatternMemoryAccessor : IMemoryAccessor
+    {
+        public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
+        {
+            buffer[0] = 0xAA;
+            bytesRead = 1;
             return true;
         }
 

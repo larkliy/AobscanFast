@@ -57,8 +57,8 @@ pip install aobscanfast
 ```python
 from aobscanfast import AobScanner
 
-scanner = AobScanner(pid=1234)
-matches = scanner.scan("48 8B ?? ?? ?? AA")
+with AobScanner(pid=1234) as scanner:
+    matches = scanner.scan("48 8B ?? ?? ?? AA")
 ```
 
 Or for local development, clone and add a project reference:
@@ -154,7 +154,7 @@ var results = scanner.Scan("48 8B ?? ?? ?? AA");
 |---|---|---|---|
 | Solid (exact) | `AA BB CC DD` | No wildcards — uses `Span<byte>.IndexOf` |
 | Byte mask | `AA ?? CC ??` | `??` matches any byte — SIMD masked comparison |
-| Nibble mask | `?A B? A?B` | `?` masks a single nibble — per-nibble mask |
+| Nibble mask | `?A B?` | `?` masks a single nibble — per-nibble mask |
 
 Patterns must be **space-separated** (tabs or other whitespace will cause a parse error).
 
@@ -216,7 +216,7 @@ AobscanFast.Tests/   — xUnit tests
 
 ```bash
 dotnet build
-dotnet test
+dotnet test AobscanFast.Tests/AobscanFast.Tests.csproj
 dotnet run --project AobscanFast.Sample
 ```
 

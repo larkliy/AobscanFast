@@ -49,7 +49,7 @@ public class LinuxProcessHandler : IProcessHandler
     }
 
     /// <inheritdoc/>
-    public unsafe (nint BaseAddress, uint Size)? GetModuleInfo(uint processId, string moduleName)
+    public unsafe (nint BaseAddress, nint Size)? GetModuleInfo(uint processId, string moduleName)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(moduleName);
 
@@ -102,7 +102,7 @@ public class LinuxProcessHandler : IProcessHandler
         if (baseAddress is null)
             return null;
 
-        return (baseAddress.Value, (uint)(lastEnd - baseAddress.Value));
+        return (baseAddress.Value, checked(lastEnd - baseAddress.Value));
     }
 
     /// <inheritdoc/>

@@ -20,7 +20,7 @@ public static unsafe class Exports
 
     private const nint DefaultChunkSize = 256 * 1024;
 
-    private static readonly ConcurrentDictionary<int, AobScanner> Scanners = new();
+    private static readonly ConcurrentDictionary<int, ScannerEntry> Scanners = new();
     private static int _nextHandle;
 
     [ThreadStatic]
@@ -32,7 +32,7 @@ public static unsafe class Exports
     {
         try
         {
-            return Add(AobScannerFactory.ForCurrentProcess());
+            return Add(new ScannerEntry(AobScannerFactory.ForCurrentProcess(), (uint)Environment.ProcessId));
         }
         catch (Exception exception)
         {
@@ -49,13 +49,15 @@ public static unsafe class Exports
             if (OperatingSystem.IsWindows())
             {
                 var processHandler = new Infrastructure.Windows.WinProcessHandler();
-                return Add(AobScannerFactory.ForRemoteProcess(processHandler.OpenProcess(processId)));
+                SafeHandle processHandle = processHandler.OpenProcess(processId);
+                return AddRemote(processId, processHandle);
             }
 
             if (OperatingSystem.IsLinux())
             {
                 var processHandler = new Infrastructure.Linux.LinuxProcessHandler();
-                return Add(AobScannerFactory.ForRemoteProcess(processHandler.OpenProcess(processId)));
+                SafeHandle processHandle = processHandler.OpenProcess(processId);
+                return AddRemote(processId, processHandle);
             }
 
             throw new PlatformNotSupportedException("AobscanFast supports Windows and Linux.");
@@ -70,7 +72,8 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "aob_scanner_destroy")]
     public static void DestroyScanner(int handle)
     {
-        Scanners.TryRemove(handle, out _);
+        if (Scanners.TryRemove(handle, out ScannerEntry? entry))
+            entry.Dispose();
     }
 
     /// <summary>Finds the first process whose name matches, starting at <paramref name="index"/>. Returns the pid, or 0 when not found.</summary>
@@ -122,10 +125,10 @@ public static unsafe class Exports
             if (batchSize < 0)
                 throw new ArgumentOutOfRangeException(nameof(batchSize));
 
-            int limit = batchSize > 0 ? batchSize : capacity;
-            List<nint> found = GetScanner(handle).Scan(
+            int limit = batchSize > 0 ? Math.Min(batchSize, capacity) : capacity;
+            List<nint> found = GetEntry(handle).Execute(scanner => scanner.Scan(
                 ReadUtf8(patternUtf8),
-                CreateOptions(minAddress, maxAddress, chunkSize, maxParallel, limit));
+                CreateOptions(minAddress, maxAddress, chunkSize, maxParallel, limit)));
 
             int count = Math.Min(found.Count, capacity);
             if (countWritten is not null)
@@ -156,9 +159,9 @@ public static unsafe class Exports
     {
         try
         {
-            nint? found = GetScanner(handle).ScanFirst(
+            nint? found = GetEntry(handle).Execute(scanner => scanner.ScanFirst(
                 ReadUtf8(patternUtf8),
-                CreateOptions(minAddress, maxAddress, chunkSize, maxParallel, 1));
+                CreateOptions(minAddress, maxAddress, chunkSize, maxParallel, 1)));
 
             if (outAddress is not null)
                 *outAddress = found is null ? 0 : (ulong)found.Value;
@@ -171,14 +174,12 @@ public static unsafe class Exports
         }
     }
 
-    /// <summary>Scans a named module for an AOB pattern and writes up to <paramref name="capacity"/> matches into <paramref name="results"/>.</summary>
+    /// <summary>Scans a named module for an AOB pattern. A zero capacity query returns the required result count.</summary>
     [UnmanagedCallersOnly(EntryPoint = "aob_scan_module")]
     public static int ScanModule(
         int handle,
-        uint processId,
         byte* moduleUtf8,
         byte* patternUtf8,
-        int batchSize,
         ulong* results,
         int capacity,
         int* countWritten)
@@ -189,14 +190,20 @@ public static unsafe class Exports
                 throw new ArgumentOutOfRangeException(nameof(capacity));
             if (capacity > 0 && results is null)
                 throw new ArgumentNullException(nameof(results));
-            if (batchSize < 0)
-                throw new ArgumentOutOfRangeException(nameof(batchSize));
+            ScannerEntry entry = GetEntry(handle);
+            List<nint> found = entry.Execute(scanner =>
+                scanner.ScanModule(entry.ProcessId, ReadUtf8(moduleUtf8), ReadUtf8(patternUtf8)));
 
-            List<nint> found = GetScanner(handle).ScanModule(processId, ReadUtf8(moduleUtf8), ReadUtf8(patternUtf8));
+            if (capacity == 0)
+            {
+                if (countWritten is not null)
+                    *countWritten = found.Count;
+                return AobOk;
+            }
 
-            int count = Math.Min(found.Count, batchSize > 0 ? batchSize : capacity);
+            int count = Math.Min(found.Count, capacity);
             if (countWritten is not null)
-                *countWritten = count;
+                *countWritten = found.Count;
 
             if (results is not null)
                 for (int i = 0; i < count; i++)
@@ -214,14 +221,15 @@ public static unsafe class Exports
     [UnmanagedCallersOnly(EntryPoint = "aob_scan_module_first")]
     public static int ScanModuleFirst(
         int handle,
-        uint processId,
         byte* moduleUtf8,
         byte* patternUtf8,
         ulong* outAddress)
     {
         try
         {
-            nint? found = GetScanner(handle).ScanModuleFirst(processId, ReadUtf8(moduleUtf8), ReadUtf8(patternUtf8));
+            ScannerEntry entry = GetEntry(handle);
+            nint? found = entry.Execute(scanner =>
+                scanner.ScanModuleFirst(entry.ProcessId, ReadUtf8(moduleUtf8), ReadUtf8(patternUtf8)));
 
             if (outAddress is not null)
                 *outAddress = found is null ? 0 : (ulong)found.Value;
@@ -254,21 +262,37 @@ public static unsafe class Exports
         return message.Length;
     }
 
-    private static int Add(AobScanner scanner)
+    private static int Add(ScannerEntry entry)
     {
         int handle = Interlocked.Increment(ref _nextHandle);
-        if (!Scanners.TryAdd(handle, scanner))
+        if (!Scanners.TryAdd(handle, entry))
             throw new InvalidOperationException("Failed to register the scanner handle.");
 
         return handle;
     }
 
-    private static AobScanner GetScanner(int handle)
+    private static int AddRemote(uint processId, SafeHandle processHandle)
     {
-        if (!Scanners.TryGetValue(handle, out AobScanner? scanner))
+        try
+        {
+            return Add(new ScannerEntry(
+                AobScannerFactory.ForRemoteProcess(processHandle),
+                processId,
+                processHandle));
+        }
+        catch
+        {
+            processHandle.Dispose();
+            throw;
+        }
+    }
+
+    private static ScannerEntry GetEntry(int handle)
+    {
+        if (!Scanners.TryGetValue(handle, out ScannerEntry? entry))
             throw new KeyNotFoundException($"Unknown scanner handle: {handle}.");
 
-        return scanner;
+        return entry;
     }
 
     private static string ReadUtf8(byte* value)
@@ -306,5 +330,34 @@ public static unsafe class Exports
             KeyNotFoundException => AobErrorInvalidHandle,
             _ => AobErrorInternal
         };
+    }
+
+    private sealed class ScannerEntry(AobScanner scanner, uint processId, SafeHandle? ownedHandle = null) : IDisposable
+    {
+        private readonly Lock _syncRoot = new();
+        private bool _disposed;
+
+        public uint ProcessId { get; } = processId;
+
+        public T Execute<T>(Func<AobScanner, T> operation)
+        {
+            lock (_syncRoot)
+            {
+                ObjectDisposedException.ThrowIf(_disposed, this);
+                return operation(scanner);
+            }
+        }
+
+        public void Dispose()
+        {
+            lock (_syncRoot)
+            {
+                if (_disposed)
+                    return;
+
+                ownedHandle?.Dispose();
+                _disposed = true;
+            }
+        }
     }
 }

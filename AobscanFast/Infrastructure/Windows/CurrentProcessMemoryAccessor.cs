@@ -56,9 +56,7 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor, ISelf
             return false;
         }
 
-        buffer.CopyTo(new Span<byte>(baseAddress.ToPointer(), buffer.Length));
-        bytesWritten = (nuint)buffer.Length;
-        return true;
+        return PInvoke.WriteProcessMemory(CurrentProcessHandle, baseAddress.ToPointer(), buffer, out bytesWritten);
     }
 
     private static bool IsMemoryAccessible(nint address, int length, MemoryAccess requiredAccess)
