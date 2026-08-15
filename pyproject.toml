@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aobscanfast"
-version = "1.0.2"
+version = "1.0.3"
 description = "High-performance native AOB memory scanner for Windows and Linux"
 readme = "README.pypi.md"
 requires-python = ">=3.9"

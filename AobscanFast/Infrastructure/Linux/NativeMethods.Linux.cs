@@ -18,4 +18,29 @@ internal static class NativeMethods
 
     [DllImport("libc", SetLastError = true)]
     internal static extern int close(int fd);
+
+    [DllImport("libc", SetLastError = true)]
+    internal static extern unsafe nint process_vm_readv(
+        int pid,
+        IoVector* localIov,
+        nuint localIovCount,
+        IoVector* remoteIov,
+        nuint remoteIovCount,
+        nuint flags);
+
+    [DllImport("libc", SetLastError = true)]
+    internal static extern unsafe nint process_vm_writev(
+        int pid,
+        IoVector* localIov,
+        nuint localIovCount,
+        IoVector* remoteIov,
+        nuint remoteIovCount,
+        nuint flags);
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal unsafe struct IoVector
+    {
+        internal void* Base;
+        internal nuint Length;
+    }
 }

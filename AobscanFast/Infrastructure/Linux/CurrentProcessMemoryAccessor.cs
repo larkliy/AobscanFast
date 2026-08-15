@@ -1,4 +1,5 @@
 using AobscanFast.Core.Interfaces;
+using System.Runtime.InteropServices;
 
 namespace AobscanFast.Infrastructure.Linux;
 
@@ -20,18 +21,34 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor, ISelf
             return false;
         }
 
-        try
+        fixed (byte* destination = buffer)
         {
-            new ReadOnlySpan<byte>(baseAddress.ToPointer(), buffer.Length).CopyTo(buffer);
-        }
-        catch (AccessViolationException)
-        {
-            bytesRead = 0;
-            return false;
-        }
+            var local = new NativeMethods.IoVector
+            {
+                Base = destination,
+                Length = (nuint)buffer.Length
+            };
+            var remote = new NativeMethods.IoVector
+            {
+                Base = baseAddress.ToPointer(),
+                Length = (nuint)buffer.Length
+            };
 
-        bytesRead = (nuint)buffer.Length;
-        return true;
+            nint result;
+            do
+            {
+                result = NativeMethods.process_vm_readv(
+                    Environment.ProcessId,
+                    &local,
+                    1,
+                    &remote,
+                    1,
+                    0);
+            } while (result < 0 && Marshal.GetLastPInvokeError() == NativeMethods.EINTR);
+
+            bytesRead = result > 0 ? (nuint)result : 0;
+            return result == buffer.Length;
+        }
     }
 
     /// <inheritdoc/>
@@ -49,17 +66,33 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor, ISelf
             return false;
         }
 
-        try
+        fixed (byte* source = buffer)
         {
-            buffer.CopyTo(new Span<byte>(baseAddress.ToPointer(), buffer.Length));
-        }
-        catch (AccessViolationException)
-        {
-            bytesWritten = 0;
-            return false;
-        }
+            var local = new NativeMethods.IoVector
+            {
+                Base = source,
+                Length = (nuint)buffer.Length
+            };
+            var remote = new NativeMethods.IoVector
+            {
+                Base = baseAddress.ToPointer(),
+                Length = (nuint)buffer.Length
+            };
 
-        bytesWritten = (nuint)buffer.Length;
-        return true;
+            nint result;
+            do
+            {
+                result = NativeMethods.process_vm_writev(
+                    Environment.ProcessId,
+                    &local,
+                    1,
+                    &remote,
+                    1,
+                    0);
+            } while (result < 0 && Marshal.GetLastPInvokeError() == NativeMethods.EINTR);
+
+            bytesWritten = result > 0 ? (nuint)result : 0;
+            return result == buffer.Length;
+        }
     }
 }
