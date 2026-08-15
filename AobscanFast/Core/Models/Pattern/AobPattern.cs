@@ -36,6 +36,15 @@ public sealed class AobPattern
     internal ReadOnlySpan<byte> MaskSpan => _mask;
     internal ReadOnlySpan<byte> SearchSequenceSpan => _searchSequence;
 
+    internal void Clear()
+    {
+        Array.Clear(_bytes);
+        if (_mask is not null)
+            Array.Clear(_mask);
+        if (_searchSequence is not null)
+            Array.Clear(_searchSequence);
+    }
+
 	/// <summary>Creates a pattern from bytes and an optional bit mask.</summary>
 	/// <param name="input">The pattern bytes. The array is copied.</param>
 	/// <param name="mask">An optional mask with the same length as <paramref name="input"/>. Set bits are matched.</param>

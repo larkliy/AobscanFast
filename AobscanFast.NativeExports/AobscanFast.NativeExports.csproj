@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <PlatformTarget>x64</PlatformTarget>
+    <PublishAot>true</PublishAot>
+    <NativeLib>Shared</NativeLib>
+    <OptimizationPreference>Speed</OptimizationPreference>
+    <Description>NativeAOT shared library exporting the AobscanFast scanner for Python and other native consumers.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AobscanFast\AobscanFast.csproj" />
+  </ItemGroup>
+
+</Project>

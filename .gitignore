@@ -196,6 +196,16 @@ PublishScripts/
 *.nupkg
 # NuGet Symbol Packages
 *.snupkg
+
+# Python package artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv*/
+src/aobscanfast/_native/*.dll
+src/aobscanfast/_native/*.so
 # The packages folder can be ignored because of Package Restore
 **/[Pp]ackages/*
 # except build/, which is used as an MSBuild target.

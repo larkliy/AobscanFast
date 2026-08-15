@@ -9,4 +9,5 @@
     <Build Solution="Debug|*" Project="false" />
   </Project>
   <Project Path="AobscanFast/AobscanFast.csproj" />
+  <Project Path="AobscanFast.NativeExports/AobscanFast.NativeExports.csproj" Id="177d04ef-47c0-417a-a38a-9949634955ee" />
 </Solution>

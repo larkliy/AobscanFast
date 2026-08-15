@@ -48,6 +48,19 @@ Install from NuGet:
 dotnet add package AobscanFast
 ```
 
+Install the Python binding from PyPI:
+
+```bash
+pip install aobscanfast
+```
+
+```python
+from aobscanfast import AobScanner
+
+scanner = AobScanner(pid=1234)
+matches = scanner.scan("48 8B ?? ?? ?? AA")
+```
+
 Or for local development, clone and add a project reference:
 
 ```bash
@@ -174,7 +187,7 @@ Patterns are parsed once into an `AobPattern` (bytes, mask, search sequence). Th
 - **Configurable chunk size** (default 256 KB) with overlap (`patternLength - 1`) — balances parallelism with cache efficiency
 - **Region merging** — adjacent memory regions are merged before chunking to minimize system calls
 - **SIMD cascade** — `MaskMatcher.IsMatch()` tries AVX-512 → AVX2 → SSE2 → scalar fallback
-- **Current-process zero-copy** — direct `unsafe` pointer reads, protected by `VirtualQuery` probe (no `AccessViolationException` catch — fatal on .NET 10)
+- **Safe current-process reads** — `ReadProcessMemory` snapshots protected by a `VirtualQuery` probe
 - **Max results** — optional result limit cancels remaining work via linked `CancellationTokenSource`
 
 ---

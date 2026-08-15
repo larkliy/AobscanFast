@@ -1,16 +1,16 @@
 using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models;
+using Microsoft.Win32.SafeHandles;
 using Windows.Win32;
-using Windows.Win32.System.Memory;
-
-using static Windows.Win32.System.Memory.PAGE_PROTECTION_FLAGS;
-using static Windows.Win32.System.Memory.VIRTUAL_ALLOCATION_TYPE;
 
 namespace AobscanFast.Infrastructure.Windows;
 
 /// <summary>Reads and writes the current Windows process address space.</summary>
-public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
+public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor, ISelfProcessMemoryAccessor
 {
+    private static readonly SafeProcessHandle CurrentProcessHandle =
+        new((nint)PInvoke.GetCurrentProcess().Value, ownsHandle: false);
+
     /// <inheritdoc/>
     public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
     {
@@ -32,9 +32,7 @@ public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
             return false;
         }
 
-        new ReadOnlySpan<byte>(baseAddress.ToPointer(), buffer.Length).CopyTo(buffer);
-        bytesRead = (nuint)buffer.Length;
-        return true;
+        return PInvoke.ReadProcessMemory(CurrentProcessHandle, baseAddress.ToPointer(), buffer, out bytesRead);
     }
 
     /// <inheritdoc/>

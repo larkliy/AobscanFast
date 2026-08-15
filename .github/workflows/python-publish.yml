@@ -1,0 +1,103 @@
+name: Python package
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Verify package version
+      if: startsWith(github.ref, 'refs/tags/v')
+      shell: pwsh
+      run: |
+        $tagVersion = $env:GITHUB_REF_NAME.Substring(1)
+        $packageVersion = python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])"
+        if ($tagVersion -ne $packageVersion) { throw "Tag $tagVersion does not match package version $packageVersion" }
+    - name: Publish native library
+      run: dotnet publish AobscanFast.NativeExports/AobscanFast.NativeExports.csproj -c Release -r win-x64
+    - name: Bundle native library
+      shell: pwsh
+      run: Copy-Item "AobscanFast.NativeExports/bin/Release/net10.0/win-x64/publish/AobscanFast.NativeExports.dll" "src/aobscanfast/_native/AobscanFast.NativeExports.dll"
+    - name: Build Windows wheel
+      shell: pwsh
+      run: |
+        python -m pip install build wheel
+        python -m build --wheel
+        $wheel = (Get-ChildItem "dist/*.whl").FullName
+        python -m wheel tags --remove --python-tag py3 --abi-tag none --platform-tag win_amd64 $wheel
+    - name: Test Windows wheel
+      shell: pwsh
+      run: |
+        python -m pip install --force-reinstall (Get-ChildItem "dist/*-win_amd64.whl").FullName
+        python -c "import ctypes; from aobscanfast import AobScanner; marker=bytes.fromhex('DE AD BE EF 13 37 00 FF AA 11 22 33'); buffer=ctypes.create_string_buffer(marker); expected=ctypes.addressof(buffer); scanner=AobScanner(); hits=scanner.scan('DE AD BE EF 13 37 00 FF AA 11 22 33', batch_size=1); assert expected in hits; assert all(ctypes.string_at(hit, len(marker)) == marker for hit in hits)"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: python-wheel-windows
+        path: dist/*.whl
+
+  build-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - name: Verify package version
+      if: startsWith(github.ref, 'refs/tags/v')
+      run: |
+        tag_version="${GITHUB_REF_NAME#v}"
+        package_version="$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")"
+        test "$tag_version" = "$package_version"
+    - name: Install NativeAOT prerequisites
+      run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+    - name: Publish native library
+      run: dotnet publish AobscanFast.NativeExports/AobscanFast.NativeExports.csproj -c Release -r linux-x64
+    - name: Bundle native library
+      run: cp AobscanFast.NativeExports/bin/Release/net10.0/linux-x64/publish/*.so src/aobscanfast/_native/libAobscanFast.NativeExports.so
+    - name: Build Linux wheel
+      run: |
+        python -m pip install build wheel auditwheel patchelf
+        python -m build --wheel
+        python -m wheel tags --remove --python-tag py3 --abi-tag none --platform-tag linux_x86_64 dist/*.whl
+        auditwheel repair dist/*-linux_x86_64.whl --wheel-dir repaired
+    - name: Test Linux wheel
+      run: |
+        python -m pip install --force-reinstall repaired/*.whl
+        python -c "import ctypes; from aobscanfast import AobScanner; marker=bytes.fromhex('DE AD BE EF 13 37 00 FF AA 11 22 33'); buffer=ctypes.create_string_buffer(marker); expected=ctypes.addressof(buffer); scanner=AobScanner(); hits=scanner.scan('DE AD BE EF 13 37 00 FF AA 11 22 33', batch_size=1); assert expected in hits; assert all(ctypes.string_at(hit, len(marker)) == marker for hit in hits)"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: python-wheel-linux
+        path: repaired/*.whl
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/aobscanfast/
+    permissions:
+      id-token: write
+
+    steps:
+    - uses: actions/download-artifact@v4
+      with:
+        pattern: python-wheel-*
+        path: dist
+        merge-multiple: true
+    - uses: pypa/gh-action-pypi-publish@release/v1

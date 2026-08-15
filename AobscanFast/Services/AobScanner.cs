@@ -53,7 +53,15 @@ public sealed class AobScanner
     public List<nint> Scan(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
     {
         var parser = _patternParserResolver.Resolve(patternInput);
-        return Scan(parser.Parse(patternInput), options, ct);
+        AobPattern pattern = parser.Parse(patternInput);
+        try
+        {
+            return Scan(pattern, options, ct);
+        }
+        finally
+        {
+            pattern.Clear();
+        }
     }
 
     /// <summary>Scans memory for a pattern and returns the first match found.</summary>
@@ -64,7 +72,15 @@ public sealed class AobScanner
     public nint? ScanFirst(string patternInput, AobScanOptions? options = null, CancellationToken ct = default)
     {
         var parser = _patternParserResolver.Resolve(patternInput);
-        return ScanFirst(parser.Parse(patternInput), options, ct);
+        AobPattern pattern = parser.Parse(patternInput);
+        try
+        {
+            return ScanFirst(pattern, options, ct);
+        }
+        finally
+        {
+            pattern.Clear();
+        }
     }
 
     /// <summary>Scans a named module in a process for a pattern expressed in AOB string syntax.</summary>
@@ -73,7 +89,15 @@ public sealed class AobScanner
     public List<nint> ScanModule(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
     {
         var parser = _patternParserResolver.Resolve(patternInput);
-        return ScanModule(processId, moduleName, parser.Parse(patternInput), ct);
+        AobPattern pattern = parser.Parse(patternInput);
+        try
+        {
+            return ScanModule(processId, moduleName, pattern, ct);
+        }
+        finally
+        {
+            pattern.Clear();
+        }
     }
 
     /// <summary>Scans a named module and returns the first match for an AOB string pattern.</summary>
@@ -82,7 +106,15 @@ public sealed class AobScanner
     public nint? ScanModuleFirst(uint processId, string moduleName, string patternInput, CancellationToken ct = default)
     {
         var parser = _patternParserResolver.Resolve(patternInput);
-        return ScanModuleFirst(processId, moduleName, parser.Parse(patternInput), ct);
+        AobPattern pattern = parser.Parse(patternInput);
+        try
+        {
+            return ScanModuleFirst(processId, moduleName, pattern, ct);
+        }
+        finally
+        {
+            pattern.Clear();
+        }
     }
 
     /// <summary>Scans a named module for a compiled pattern.</summary>

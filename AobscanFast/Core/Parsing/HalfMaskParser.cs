@@ -63,13 +63,21 @@ internal class HalfMaskParser : IPatternParser
             var finalBytes = pBytes[..length].ToArray();
             var finalMask = pMask[..length].ToArray();
 
-            return AobPattern.FromBytes(finalBytes, finalMask);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(pooledBytes);
-            ArrayPool<byte>.Shared.Return(pooledMask);
-        }
+			try
+			{
+				return AobPattern.FromBytes(finalBytes, finalMask);
+			}
+			finally
+			{
+				Array.Clear(finalBytes);
+				Array.Clear(finalMask);
+			}
+		}
+		finally
+		{
+			ArrayPool<byte>.Shared.Return(pooledBytes, clearArray: true);
+			ArrayPool<byte>.Shared.Return(pooledMask, clearArray: true);
+		}
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

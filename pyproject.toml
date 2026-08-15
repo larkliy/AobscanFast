@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aobscanfast"
+version = "1.0.2"
+description = "High-performance native AOB memory scanner for Windows and Linux"
+readme = "README.pypi.md"
+requires-python = ">=3.9"
+license = "MIT"
+authors = [{ name = "larkliy" }]
+keywords = ["memory", "scanner", "aob", "pattern", "reverse-engineering"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: System :: Systems Administration",
+]
+
+[project.urls]
+Homepage = "https://github.com/larkliy/AobscanFast"
+Repository = "https://github.com/larkliy/AobscanFast"
+Issues = "https://github.com/larkliy/AobscanFast/issues"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+aobscanfast = ["_native/*.dll", "_native/*.so"]

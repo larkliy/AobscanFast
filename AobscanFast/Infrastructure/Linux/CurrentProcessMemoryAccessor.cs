@@ -3,7 +3,7 @@ using AobscanFast.Core.Interfaces;
 namespace AobscanFast.Infrastructure.Linux;
 
 /// <summary>Reads and writes the current Linux process address space.</summary>
-public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor
+public sealed unsafe class CurrentProcessMemoryAccessor : IMemoryAccessor, ISelfProcessMemoryAccessor
 {
     /// <inheritdoc/>
     public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)

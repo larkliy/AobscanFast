@@ -2,6 +2,8 @@ using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
 using System.Buffers;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace AobscanFast.Services;
 
@@ -40,7 +42,7 @@ public sealed class ScanOrchestrator
         return results.Count == 0 ? null : results[0];
     }
 
-    private List<nint> ScanCore(AobPattern pattern, AobScanOptions options, int effectiveMaxResults, CancellationToken ct)
+    private unsafe List<nint> ScanCore(AobPattern pattern, AobScanOptions options, int effectiveMaxResults, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(pattern);
         ArgumentNullException.ThrowIfNull(options);
@@ -51,6 +53,14 @@ public sealed class ScanOrchestrator
             throw new ArgumentException("Pattern length cannot exceed chunk size. Increase ChunkSize in AobScanOptions.", nameof(pattern));
 
         var matcher = _patternMatcherResolver.Resolve(pattern);
+        using MemoryHandle bytesHandle = pattern.Bytes.Pin();
+        using MemoryHandle maskHandle = pattern.Mask.IsEmpty ? default : pattern.Mask.Pin();
+        using MemoryHandle searchSequenceHandle = pattern.SearchSequence.IsEmpty ? default : pattern.SearchSequence.Pin();
+        MemoryRange[] excludedRanges = CreateExcludedRanges(
+            pattern,
+            bytesHandle.Pointer,
+            maskHandle.Pointer,
+            searchSequenceHandle.Pointer);
         var rawRegions = _regionEnumerator.GetRegions(options.MinScanAddress, options.MaxScanAddress, options.MemoryAccess);
         var mergedRegions = _memoryRangePlanner.MergeAdjacentRegions(rawRegions);
         var scanChunks = _memoryRangePlanner.CreateScanChunks(mergedRegions, pattern.Length, options.ChunkSize);
@@ -67,7 +77,9 @@ public sealed class ScanOrchestrator
         var parallelOptions = new ParallelOptions
         {
             CancellationToken = cts.Token,
-            MaxDegreeOfParallelism = options.MaxDegreeOfParallelism > 0
+            MaxDegreeOfParallelism = _memoryAccessor is ISelfProcessMemoryAccessor
+                ? 1
+                : options.MaxDegreeOfParallelism > 0
                 ? options.MaxDegreeOfParallelism
                 : -1
         };
@@ -85,14 +97,16 @@ public sealed class ScanOrchestrator
                         return;
                     }
 
+                    var chunkResults = new List<nint>(64);
                     int chunkBufSize = checked((int)chunk.Size);
+
                     byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(chunkBufSize);
                     Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
-                    var chunkResults = new List<nint>(64);
+                    nint bufferAddress = (nint)Unsafe.AsPointer(ref MemoryMarshal.GetArrayDataReference(rentedBuffer));
 
                     try
                     {
-                        bool success = _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
+                        _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
                         if (bytesRead > (nuint)buffer.Length)
                             throw new InvalidOperationException("Memory accessor returned more bytes than the supplied buffer can hold.");
 
@@ -105,8 +119,13 @@ public sealed class ScanOrchestrator
                     }
                     finally
                     {
-                        ArrayPool<byte>.Shared.Return(rentedBuffer);
+                        ArrayPool<byte>.Shared.Return(
+                            rentedBuffer,
+                            clearArray: _memoryAccessor is ISelfProcessMemoryAccessor);
                     }
+
+                    chunkResults.RemoveAll(address => IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length));
+                    chunkResults.RemoveAll(address => IsExcluded(address, pattern.Length, excludedRanges));
 
                     if (chunkResults.Count == 0)
                         return;
@@ -150,6 +169,45 @@ public sealed class ScanOrchestrator
         ct.ThrowIfCancellationRequested();
 
         return results;
+    }
+
+    private static unsafe MemoryRange[] CreateExcludedRanges(
+        AobPattern pattern,
+        void* bytesPointer,
+        void* maskPointer,
+        void* searchSequencePointer)
+    {
+        var ranges = new List<MemoryRange>(3);
+        AddPinnedRange(ranges, bytesPointer, pattern.Bytes.Length);
+        AddPinnedRange(ranges, maskPointer, pattern.Mask.Length);
+        AddPinnedRange(ranges, searchSequencePointer, pattern.SearchSequence.Length);
+        return [.. ranges];
+    }
+
+    private static unsafe void AddPinnedRange(List<MemoryRange> ranges, void* pointer, int length)
+    {
+        if (pointer is not null && length > 0)
+            ranges.Add(new MemoryRange((nint)pointer, length));
+    }
+
+    private static bool IsExcluded(nint address, int length, MemoryRange[] excludedRanges)
+    {
+        nint end = checked(address + length);
+        foreach (MemoryRange excluded in excludedRanges)
+        {
+            nint excludedEnd = checked(excluded.BaseAddress + excluded.Size);
+            if (address < excludedEnd && end > excluded.BaseAddress)
+                return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsRangeOverlap(nint address, int length, nint rangeAddress, int rangeLength)
+    {
+        nint end = checked(address + length);
+        nint rangeEnd = checked(rangeAddress + rangeLength);
+        return address < rangeEnd && end > rangeAddress;
     }
 
     private static void ValidateOptions(AobScanOptions options)

@@ -83,6 +83,21 @@ public class ScanOrchestratorTests
         Assert.Equal((nint)0x1001, result);
     }
 
+    [Fact]
+    public void Scan_SelfProcessAccessor_UsesSequentialPooledReads()
+    {
+        var accessor = new SelfProcessTestMemoryAccessor([0x00, 0xAA, 0x00]);
+        var orchestrator = CreateOrchestrator(accessor, [new(0x1000, 3)]);
+
+        var results = orchestrator.Scan(
+            AobPattern.FromBytes([0xAA]),
+            new AobScanOptions { ChunkSize = 3 },
+            default);
+
+        Assert.Equal([(nint)0x1001], results);
+        Assert.Equal(1, accessor.ReadCalls);
+    }
+
     private static ScanOrchestrator CreateOrchestrator(IMemoryAccessor accessor, List<MemoryRange> ranges)
         => new(new TestRegionEnumerator(ranges), accessor, new PatternMatcherResolver(), new RegionProcessor());
 
@@ -99,6 +114,25 @@ public class ScanOrchestratorTests
             data.AsSpan(0, length).CopyTo(buffer);
             bytesRead = (nuint)length;
             return returnsSuccess;
+        }
+
+        public bool WriteMemory(nint baseAddress, ReadOnlySpan<byte> buffer, out nuint bytesWritten)
+        {
+            bytesWritten = 0;
+            return false;
+        }
+    }
+
+    private sealed class SelfProcessTestMemoryAccessor(byte[] data) : IMemoryAccessor, ISelfProcessMemoryAccessor
+    {
+        public int ReadCalls { get; private set; }
+
+        public bool ReadMemory(nint baseAddress, Span<byte> buffer, out nuint bytesRead)
+        {
+            ReadCalls++;
+            data.AsSpan(0, Math.Min(data.Length, buffer.Length)).CopyTo(buffer);
+            bytesRead = (nuint)Math.Min(data.Length, buffer.Length);
+            return true;
         }
 
         public bool WriteMemory(nint baseAddress, ReadOnlySpan<byte> buffer, out nuint bytesWritten)
