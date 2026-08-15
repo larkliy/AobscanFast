@@ -15,7 +15,8 @@ with AobScanner() as scanner:
     assert hits == sorted(hits)
     assert all(ctypes.string_at(hit, len(marker)) == marker for hit in hits)
 
-    module_name = os.path.basename(sys.executable)
+    module_path = sys.executable if os.name == "nt" else os.path.realpath(sys.executable)
+    module_name = os.path.basename(module_path)
     module_pattern = "4D 5A" if os.name == "nt" else "7F 45 4C 46"
     module_hits = scanner.scan_module(module_name, module_pattern)
     module_first = scanner.scan_module_first(module_name, module_pattern)

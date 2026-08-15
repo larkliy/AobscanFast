@@ -71,6 +71,10 @@ public class LinuxProcessHandler : IProcessHandler
                 string pathLine = span[pathIdx..].Trim().ToString();
                 if (pathLine.Length == 0) continue;
 
+                const string deletedSuffix = " (deleted)";
+                if (pathLine.EndsWith(deletedSuffix, StringComparison.Ordinal))
+                    pathLine = pathLine[..^deletedSuffix.Length];
+
                 string fileName = Path.GetFileName(pathLine);
                 if (!fileName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
                     continue;
@@ -122,21 +126,18 @@ public class LinuxProcessHandler : IProcessHandler
 
     private static int FindPathStart(ReadOnlySpan<char> line)
     {
-        int spaceCount = 0;
-        for (int i = 0; i < line.Length; i++)
+        int position = 0;
+        for (int field = 0; field < 5; field++)
         {
-            if (line[i] == ' ')
-            {
-                spaceCount++;
-                if (spaceCount == 4)
-                {
-                    int pathStart = i + 1;
-                    while (pathStart < line.Length && line[pathStart] == ' ')
-                        pathStart++;
-                    return pathStart < line.Length ? pathStart : -1;
-                }
-            }
+            while (position < line.Length && char.IsWhiteSpace(line[position]))
+                position++;
+            while (position < line.Length && !char.IsWhiteSpace(line[position]))
+                position++;
         }
-        return -1;
+
+        while (position < line.Length && char.IsWhiteSpace(line[position]))
+            position++;
+
+        return position < line.Length ? position : -1;
     }
 }
