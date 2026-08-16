@@ -10,7 +10,23 @@
     SIMD-accelerated, parallel, cross-platform — written in modern C#.
   </p>
 
-  <a href="#">
+  <a href="https://www.nuget.org/packages/AobscanFast">
+    <img src="https://img.shields.io/nuget/v/AobscanFast?style=flat-square&logo=nuget" alt="NuGet Version" />
+  </a>
+  <a href="https://pypi.org/project/aobscanfast/">
+    <img src="https://img.shields.io/pypi/v/aobscanfast?style=flat-square&logo=pypi" alt="PyPI Version" />
+  </a>
+  <a href="https://github.com/larkliy/AobscanFast/actions/workflows/dotnet.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/larkliy/AobscanFast/dotnet.yml?style=flat-square&logo=github" alt="CI" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/github/license/larkliy/AobscanFast?style=flat-square" alt="License" />
+  </a>
+  <a href="https://github.com/larkliy/AobscanFast/stargazers">
+    <img src="https://img.shields.io/github/stars/larkliy/AobscanFast?style=flat-square&logo=github" alt="Stars" />
+  </a>
+  <br>
+  <a href="https://dotnet.microsoft.com/">
     <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet" alt=".NET Version" />
   </a>
   <a href="#">
@@ -67,6 +83,8 @@ Or for local development, clone and add a project reference:
 git clone https://github.com/larkliy/AobscanFast.git
 dotnet add reference AobscanFast/AobscanFast.csproj
 ```
+
+> **Requirements:** x64 OS (Windows x64 or Linux x64). The native library and Python bindings are built for x64 only — ARM builds are not provided yet.
 
 ---
 
@@ -151,7 +169,7 @@ var results = scanner.Scan("48 8B ?? ?? ?? AA");
 ## Pattern syntax
 
 | Type | Example | Description |
-|---|---|---|---|
+|---|---|---|
 | Solid (exact) | `AA BB CC DD` | No wildcards — uses `Span<byte>.IndexOf` |
 | Byte mask | `AA ?? CC ??` | `??` matches any byte — SIMD masked comparison |
 | Nibble mask | `?A B?` | `?` masks a single nibble — per-nibble mask |
