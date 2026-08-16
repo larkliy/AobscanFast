@@ -210,6 +210,25 @@ Patterns are parsed once into an `AobPattern` (bytes, mask, search sequence). Th
 
 ---
 
+## Benchmarks
+
+Measured with BenchmarkDotNet over a pinned in-process 64 MiB buffer (deterministic pseudo-random data, pattern planted at 25% / 50% / 75%). Run them yourself:
+
+```bash
+dotnet run -c Release --project AobscanFast.Benchmarks
+```
+
+| Method | Pattern | Mean | Throughput | Allocated |
+|---|---|---|---|---|
+| `Scan` — solid | `48 8B 01 02 03 AA` | 41.32 ms | ~1.6 GB/s | 183 KB |
+| `Scan` — byte mask | `48 8B ?? ?? ?? AA` | 40.72 ms | ~1.6 GB/s | 184 KB |
+| `Scan` — nibble mask | `4? 8? ?? ?? ?? A?` | 219.32 ms | ~306 MB/s | 811 KB |
+| `ScanFirst` — solid | `48 8B 01 02 03 AA` | 16.66 ms | early exit | 62 KB |
+
+Environment: Intel Core i3-10100F (4C/8T, AVX2), .NET 10.0.11, Windows 10. Solid and byte-mask scans are dominated by memory reads; the nibble-mask path compares per-nibble and is slower by design. The SIMD cascade runs at AVX2 width on this CPU (`Vector256`).
+
+---
+
 ## Project structure
 
 ```
@@ -224,8 +243,9 @@ AobscanFast/
   Infrastructure/
     Windows/         — Win32 API implementations
     Linux/           — /proc-based implementations
-AobscanFast.Sample/  — demo console app
-AobscanFast.Tests/   — xUnit tests
+AobscanFast.Sample/      — demo console app
+AobscanFast.Tests/       — xUnit tests
+AobscanFast.Benchmarks/  — BenchmarkDotNet micro-benchmarks
 ```
 
 ---
@@ -236,6 +256,7 @@ AobscanFast.Tests/   — xUnit tests
 dotnet build
 dotnet test AobscanFast.Tests/AobscanFast.Tests.csproj
 dotnet run --project AobscanFast.Sample
+dotnet run -c Release --project AobscanFast.Benchmarks
 ```
 
 ---

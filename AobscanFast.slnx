@@ -8,6 +8,9 @@
   <Project Path="AobscanFast.Tests/AobscanFast.Tests.csproj" Id="af8551b0-7412-49d8-9809-8e8260ae6c54">
     <Build Solution="Debug|*" Project="false" />
   </Project>
+  <Project Path="AobscanFast.Benchmarks/AobscanFast.Benchmarks.csproj" Id="b215608c-4455-4dae-8f1a-bf5ea61b693b">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
   <Project Path="AobscanFast/AobscanFast.csproj" />
   <Project Path="AobscanFast.NativeExports/AobscanFast.NativeExports.csproj" Id="177d04ef-47c0-417a-a38a-9949634955ee" />
 </Solution>
