@@ -9,7 +9,7 @@
 		<PlatformTarget>x64</PlatformTarget>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 		<PackageId>AobscanFast</PackageId>
-		<Version>1.0.0</Version>
+		<Version>2.0.0</Version>
 		<Authors>larkliy</Authors>
 		<Description>High-performance memory pattern (AOB) scanner for Windows and Linux.</Description>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
