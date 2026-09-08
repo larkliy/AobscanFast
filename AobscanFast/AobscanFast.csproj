@@ -35,4 +35,23 @@
 		<InternalsVisibleTo Include="AobscanFast.Tests" />
 	</ItemGroup>
 
+	<!-- ALERT!!!! Build a library before starting project compilation!!!-->
+	<ItemGroup>
+		<None Include="..\AobscanFast.NativeC\runtimes\**\*\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<Link>runtimes\%(RecursiveDir)%(Filename)%(Extension)</Link>
+			<Pack>true</Pack>
+			<PackagePath>runtimes\%(RecursiveDir)</PackagePath>
+		</None>
+
+		<None Include="..\AobscanFast.NativeC\build\Release\AobscanFastNativeC.dll" Condition="Exists('..\AobscanFast.NativeC\build\Release\AobscanFastNativeC.dll')">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<Link>AobscanFastNativeC.dll</Link>
+		</None>
+		<None Include="..\AobscanFast.NativeC\runtimes\win-x64\native\Release\AobscanFastNativeC.dll" Condition="Exists('..\AobscanFast.NativeC\runtimes\win-x64\native\Release\AobscanFastNativeC.dll')">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<Link>AobscanFastNativeC.dll</Link>
+		</None>
+	</ItemGroup>
+
 </Project>

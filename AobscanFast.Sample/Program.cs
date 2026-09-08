@@ -64,8 +64,10 @@ string testPattern = "DE AD BE EF";
 
 var scanResult = localScanner.ScanFirst(testPattern);
 Console.WriteLine($"  ScanFirst(\"{testPattern}\"): {(scanResult.HasValue ? $"0x{scanResult.Value:X}" : "not found")}");
-
-const int iterations = 100;
+int gen0Before = GC.CollectionCount(0);
+int gen1Before = GC.CollectionCount(1);
+int gen2Before = GC.CollectionCount(2);
+const int iterations = 10;
 var sw = Stopwatch.StartNew();
 int totalFound = 0;
 
@@ -76,8 +78,16 @@ for (int i = 0; i < iterations; i++)
 }
 
 sw.Stop();
+int gen0After = GC.CollectionCount(0);
+int gen1After = GC.CollectionCount(1);
+int gen2After = GC.CollectionCount(2);
+int totalGC0 = gen0After - gen0Before;
+int totalGC1 = gen1After - gen1Before;
+int totalGC2 = gen2After - gen2Before;
+
 double avgMs = sw.Elapsed.TotalMilliseconds / iterations;
-Console.WriteLine($"  Benchmark ({iterations}x Scan): avg={avgMs:F3}ms, found={totalFound}");
+Console.WriteLine($"  Benchmark ({iterations}x Scan): avg={avgMs:F3}ms, found={totalFound}, GC Levels" + 
+                    $"GC0={totalGC0} GC1={totalGC1} GC2={totalGC2}");
 
 // ============================================================================
 // 4. Remote process — open, read regions, scan

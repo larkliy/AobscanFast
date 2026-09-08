@@ -48,11 +48,12 @@
 
 - **Cross-platform** — Windows (Win32 API) and Linux (`/proc/pid/mem` + `/proc/pid/maps`)
 - **SIMD cascade** — automatically uses `Vector512` (AVX-512), `Vector256` (AVX2), or `Vector128` (SSE2) depending on CPU capabilities
-- **Parallel scanning** — memory is split into configurable chunks (default 256 KB) and scanned concurrently via `Parallel.ForEach`
+- **Chunked scanning** — memory is split into configurable `chunks` (default 256 KB)
 - **Zero-allocation paths** — `ArrayPool<byte>`, `Span<T>`, `stackalloc` throughout; no per-chunk allocations in the hot loop
 - **Strategy pattern** — parsers and matchers are selected automatically based on the pattern syntax
 - **DI-ready** — all dependencies injected through interfaces; `AobScannerFactory` for quick start
 - **Configurable** — chunk size, parallelism degree, and result limit (`AobScanOptions.ChunkSize`, `MaxDegreeOfParallelism`, `MaxResults`)
+- **Fast** - `AobscanFast` uses parts of `C` code to ensure maximum performance in extremely complex half-mask(A?) patterns.
 
 ---
 
@@ -218,12 +219,13 @@ Measured with BenchmarkDotNet over a pinned in-process 64 MiB buffer (determinis
 dotnet run -c Release --project AobscanFast.Benchmarks
 ```
 
+(New table, tested on Intel Core I3-8100(4C/4T, SSE-AVX2), Windows 11.)
 | Method | Pattern | Mean | Throughput | Allocated |
 |---|---|---|---|---|
-| `Scan` — solid | `48 8B 01 02 03 AA` | 41.32 ms | ~1.6 GB/s | 183 KB |
-| `Scan` — byte mask | `48 8B ?? ?? ?? AA` | 40.72 ms | ~1.6 GB/s | 184 KB |
-| `Scan` — nibble mask | `4? 8? ?? ?? ?? A?` | 219.32 ms | ~306 MB/s | 811 KB |
-| `ScanFirst` — solid | `48 8B 01 02 03 AA` | 16.66 ms | early exit | 62 KB |
+| `Scan` — solid | `48 8B 01 02 03 AA` | 67.32 ms | ~1.6 GB/s | 43.03 KB |
+| `Scan` — byte mask | `48 8B ?? ?? ?? AA` | 65.05 ms | ~1.4 GB/s | 43.16 KB |
+| `Scan` — nibble mask | `4? 8? ?? ?? ?? A?` | 65.00 ms | ~1.5 MB/s | 43.11 KB |
+| `ScanFirst` — solid | `48 8B 01 02 03 AA` | 31.32 ms | early exit | 31.62 KB |
 
 Environment: Intel Core i3-10100F (4C/8T, AVX2), .NET 10.0.11, Windows 10. Solid and byte-mask scans are dominated by memory reads; the nibble-mask path compares per-nibble and is slower by design. The SIMD cascade runs at AVX2 width on this CPU (`Vector256`).
 
@@ -246,6 +248,7 @@ AobscanFast/
 AobscanFast.Sample/      — demo console app
 AobscanFast.Tests/       — xUnit tests
 AobscanFast.Benchmarks/  — BenchmarkDotNet micro-benchmarks
+AobscanFast.NativeC/     - Native C Code
 ```
 
 ---
@@ -253,11 +256,18 @@ AobscanFast.Benchmarks/  — BenchmarkDotNet micro-benchmarks
 ## Building and testing
 
 ```bash
+git clone https://github.com/larkliy/AobscanFast.git
+cd AobscanFast
+cd AobscanFast.NativeC
+python3 configure.py -build -multithreaded
+cd ..
 dotnet build
 dotnet test AobscanFast.Tests/AobscanFast.Tests.csproj
 dotnet run --project AobscanFast.Sample
 dotnet run -c Release --project AobscanFast.Benchmarks
 ```
+
+Also see the [NativeC](AobscanFast.NativeC/README.md)
 
 ---
 

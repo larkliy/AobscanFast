@@ -3,11 +3,13 @@ using AobscanFast.Core.Models;
 using AobscanFast.Core.Models.Pattern;
 using System.Buffers;
 using System.Runtime.InteropServices;
+using AobscanFast.Core.Matching;
+using System.Diagnostics;
 
 namespace AobscanFast.Services;
 
 /// <summary>Coordinates memory enumeration, chunking, reads, matching, and cancellation.</summary>
-public sealed class ScanOrchestrator
+public sealed partial class ScanOrchestrator
 {
     private readonly IMemoryRegionEnumerator _regionEnumerator;
     private readonly IMemoryAccessor _memoryAccessor;
@@ -40,6 +42,35 @@ public sealed class ScanOrchestrator
         List<nint> results = ScanCore(pattern, options, 1, ct);
         return results.Count == 0 ? null : results[0];
     }
+    [LibraryImport("AobscanFastNativeC", EntryPoint = "nativec_scan_solid")]
+    private static unsafe partial nint NativeScanSolid(
+        byte* buf, nint bufLen,
+        byte* patt, nint pattLen,
+        nint* outResults, nint maxResults
+    );
+
+    private static List<List<MemoryRange>> GroupChanksInfoBatches(List<MemoryRange> chunks, int maxBatchSize = 4 * 1024 * 1024)
+    {
+        var batches = new List<List<MemoryRange>>();
+        var curBatch = new List<MemoryRange>();
+        long curBatchSize = 0;
+
+        foreach (var chunk in chunks)
+        {
+            if (curBatchSize + chunk.Size > maxBatchSize && curBatch.Count > 0)
+            {
+                batches.Add(curBatch);
+                curBatch = new List<MemoryRange>();
+                curBatchSize = 0;
+            }
+
+            curBatch.Add(chunk);
+            curBatchSize += chunk.Size;
+        }
+
+        if (curBatch.Count > 0) batches.Add(curBatch);
+        return batches;
+    }
 
     private unsafe List<nint> ScanCore(AobPattern pattern, AobScanOptions options, int effectiveMaxResults, CancellationToken ct)
     {
@@ -51,6 +82,7 @@ public sealed class ScanOrchestrator
         if (pattern.Length > options.ChunkSize)
             throw new ArgumentException("Pattern length cannot exceed chunk size. Increase ChunkSize in AobScanOptions.", nameof(pattern));
 
+        var swTotal = Stopwatch.StartNew();
         var matcher = _patternMatcherResolver.Resolve(pattern);
         using MemoryHandle bytesHandle = pattern.Bytes.Pin();
         using MemoryHandle maskHandle = pattern.Mask.IsEmpty ? default : pattern.Mask.Pin();
@@ -60,125 +92,128 @@ public sealed class ScanOrchestrator
             bytesHandle.Pointer,
             maskHandle.Pointer,
             searchSequenceHandle.Pointer);
+
         var rawRegions = _regionEnumerator.GetRegions(options.MinScanAddress, options.MaxScanAddress, options.MemoryAccess);
         var mergedRegions = _memoryRangePlanner.MergeAdjacentRegions(rawRegions);
         var scanChunks = _memoryRangePlanner.CreateScanChunks(mergedRegions, pattern.Length, options.ChunkSize);
+        
+        const int selfBatchBytes = 4 * 1024 * 1024;
+        var chunkBatches = GroupChanksInfoBatches(scanChunks, selfBatchBytes);
 
-        int initialCapacity = effectiveMaxResults > 0
-            ? Math.Min(1024, effectiveMaxResults)
-            : 1024;
-
-        var results = new List<nint>(initialCapacity);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        Lock syncRoot = new();
-        bool internalLimitReached = false;
-
-        var parallelOptions = new ParallelOptions
-        {
-            CancellationToken = cts.Token,
-            MaxDegreeOfParallelism = effectiveMaxResults > 0 || _memoryAccessor is ISelfProcessMemoryAccessor
-                ? 1
-                : options.MaxDegreeOfParallelism > 0
-                ? options.MaxDegreeOfParallelism
-                : -1
-        };
+        var results = new List<nint>(effectiveMaxResults > 0 ? Math.Min(1024, effectiveMaxResults) : 1024);
+        
+        byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(selfBatchBytes + 1024);
 
         try
         {
-            Parallel.ForEach(
-                scanChunks,
-                parallelOptions,
-                (chunk, state) =>
+            fixed (byte* bufferPointer = rentedBuffer)
+            {
+                fixed (byte* pPattern = pattern.BytesSpan)
                 {
-                    if (cts.IsCancellationRequested)
+                    foreach (var batch in chunkBatches)
                     {
-                        state.Stop();
-                        return;
-                    }
+                        if (ct.IsCancellationRequested) break;
 
-                    var chunkResults = new List<nint>(64);
-                    int chunkBufSize = checked((int)chunk.Size);
+                        var effectiveChunks = new List<(nint EffectiveBase, int Size, int OffsetInBuffer)>(batch.Count);
+                        int batchTotalSize = 0;
+                        nint prevChunkEnd = nint.MinValue;
 
-                    byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(chunkBufSize);
-
-                    try
-                    {
-                        fixed (byte* bufferPointer = rentedBuffer)
+                        foreach (var chunk in batch)
                         {
-                            Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
-                            nint bufferAddress = (nint)bufferPointer;
-                            if (_memoryAccessor is ISelfProcessMemoryAccessor &&
-                                IsRangeOverlap(chunk.BaseAddress, chunkBufSize, bufferAddress, rentedBuffer.Length))
+                            int chunkSize = checked((int)chunk.Size);
+                            nint chunkEnd = chunk.BaseAddress + chunkSize;
+                            nint effectiveBase = chunk.BaseAddress;
+                            int effectiveSize = chunkSize;
+
+                            if (chunk.BaseAddress < prevChunkEnd)
                             {
-                                return;
+                                nint skipBytes = prevChunkEnd - chunk.BaseAddress;
+                                effectiveBase = chunk.BaseAddress + skipBytes;
+                                effectiveSize = chunkSize - (int)skipBytes;
                             }
 
-                            _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
-                            if (bytesRead > (nuint)buffer.Length)
-                                throw new InvalidOperationException("Memory accessor returned more bytes than the supplied buffer can hold.");
-
-                            int validLength = checked((int)bytesRead);
-                            if (validLength >= pattern.Length)
+                            if (effectiveSize > 0)
                             {
-                                var actualRange = new MemoryRange(chunk.BaseAddress, validLength);
-                                int chunkResultLimit = effectiveMaxResults > 0
-                                    ? effectiveMaxResults - results.Count
-                                    : 0;
-                                matcher.ScanChunk(actualRange, pattern, chunkResults, buffer[..validLength], chunkResultLimit);
+                                effectiveChunks.Add((effectiveBase, effectiveSize, batchTotalSize));
+                                batchTotalSize += effectiveSize;
+                            }
+                            prevChunkEnd = chunkEnd;
+                        }
+
+                        if (batchTotalSize == 0) continue;
+
+                        Span<byte> bufferSpan = rentedBuffer.AsSpan(0, batchTotalSize);
+                        foreach (var ec in effectiveChunks)
+                        {
+                            var subSpan = bufferSpan.Slice(ec.OffsetInBuffer, ec.Size);
+                            _memoryAccessor.ReadMemory(ec.EffectiveBase, subSpan, out _);
+                        }
+
+                        int localLimit = 1024;
+                        nint* localOffsets = stackalloc nint[localLimit];
+
+                        nint foundInBatch = NativeScanSolid(
+                            bufferPointer, batchTotalSize,
+                            pPattern, pattern.Length,
+                            localOffsets, localLimit
+                        );
+
+                        if (foundInBatch == 0) continue;
+
+                        int chunkIndex = 0;
+                        nint bufferAddress = (nint)bufferPointer;
+
+                        for (int i = 0; i < foundInBatch; i++)
+                        {
+                            nint offsetInBatch = localOffsets[i];
+
+                            while (chunkIndex < effectiveChunks.Count && 
+                                offsetInBatch >= effectiveChunks[chunkIndex].OffsetInBuffer + effectiveChunks[chunkIndex].Size)
+                            {
+                                chunkIndex++;
                             }
 
-                            chunkResults.RemoveAll(address => IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length));
-                            chunkResults.RemoveAll(address => IsExcluded(address, pattern.Length, excludedRanges));
+                            if (chunkIndex < effectiveChunks.Count)
+                            {
+                                var ec = effectiveChunks[chunkIndex];
+                                nint realAddr = ec.EffectiveBase + (offsetInBatch - ec.OffsetInBuffer);
+
+                                if (!IsRangeOverlap(realAddr, pattern.Length, bufferAddress, rentedBuffer.Length) &&
+                                    !IsExcluded(realAddr, pattern.Length, excludedRanges))
+                                {
+                                    results.Add(realAddr);
+
+                                    if (effectiveMaxResults > 0 && results.Count >= effectiveMaxResults)
+                                    {
+                                        goto LimitReached; // Быстрый выход из всех циклов
+                                    }
+                                }
+                            }
                         }
                     }
-                    finally
-                    {
-                        ArrayPool<byte>.Shared.Return(
-                            rentedBuffer,
-                            clearArray: _memoryAccessor is ISelfProcessMemoryAccessor);
-                    }
+                }
+            }
 
-                    if (chunkResults.Count == 0)
-                        return;
-
-                    bool limitReached = false;
-                    lock (syncRoot)
-                    {
-                        if (effectiveMaxResults > 0)
-                        {
-                            int remaining = effectiveMaxResults - results.Count;
-                            if (remaining > 0)
-                            {
-                                int take = Math.Min(remaining, chunkResults.Count);
-                                results.AddRange(chunkResults.GetRange(0, take));
-                            }
-
-                            if (results.Count >= effectiveMaxResults)
-                            {
-                                internalLimitReached = true;
-                                limitReached = true;
-                            }
-                        }
-                        else
-                        {
-                            results.AddRange(chunkResults);
-                        }
-                    }
-
-                    if (limitReached)
-                    {
-                        state.Stop();
-                        if (!ct.IsCancellationRequested)
-                            cts.Cancel();
-                    }
-                });
+        LimitReached:;
         }
-        catch (OperationCanceledException) when (internalLimitReached && !ct.IsCancellationRequested)
+        finally
         {
+            ArrayPool<byte>.Shared.Return(rentedBuffer, clearArray: false);
         }
 
         ct.ThrowIfCancellationRequested();
 
+        if (results.Count > 1)
+        {
+            results.Sort();
+            int uniqueCount = 1;
+            for (int i = 1; i < results.Count; i++)
+            {
+                if (results[i] != results[uniqueCount - 1])
+                    results[uniqueCount++] = results[i];
+            }
+            results.RemoveRange(uniqueCount, results.Count - uniqueCount);
+        }
         return results;
     }
 
@@ -214,7 +249,7 @@ public sealed class ScanOrchestrator
         return false;
     }
 
-    private static bool IsRangeOverlap(nint address, int length, nint rangeAddress, int rangeLength)
+    private static bool IsRangeOverlap/*Overlarp*/(nint address, int length, nint rangeAddress, int rangeLength)
     {
         nint end = checked(address + length);
         nint rangeEnd = checked(rangeAddress + rangeLength);

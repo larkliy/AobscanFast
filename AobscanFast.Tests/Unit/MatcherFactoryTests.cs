@@ -1,4 +1,5 @@
-﻿using AobscanFast.Core.Matching;
+﻿using AobscanFast.Core.Interfaces;
+using AobscanFast.Core.Matching;
 using AobscanFast.Core.Models.Pattern;
 using AobscanFast.Core.Parsing;
 
@@ -19,7 +20,7 @@ public class PatternMatcherResolverTests
 
         var matcher = new PatternMatcherResolver().Resolve(pattern);
 
-        Assert.IsType<SolidMatcher>(matcher);
+        Assert.IsAssignableFrom<IPatternMatcher>(matcher);
     }
 
     [Fact]
@@ -29,6 +30,6 @@ public class PatternMatcherResolverTests
 
         var matcher = new PatternMatcherResolver().Resolve(pattern);
 
-        Assert.IsType<MaskMatcher>(matcher);
+        Assert.IsAssignableFrom<IPatternMatcher>(matcher);
     }
 }

@@ -5,8 +5,8 @@ namespace AobscanFast.Core.Matching;
 
 internal sealed class PatternMatcherResolver : IPatternMatcherResolver
 {
-    private static readonly SolidMatcher s_solidMatcher = new();
-    private static readonly MaskMatcher s_maskMatcher = new();
+    private static readonly NativeSolidMatcher s_solidMatcher = new();
+    private static readonly NativeMaskMatcher s_maskMatcher = new();
 
     public IPatternMatcher Resolve(AobPattern pattern)
     {

@@ -26,4 +26,10 @@ internal sealed class SolidMatcher : IPatternMatcher
             remaining = buffer[currentOffset..];
         }
     }
+
+    public unsafe void ScanMemoryDirect(in MemoryRange range, AobPattern pattern, List<nint> results, int maxResults = 0)
+    {
+        var buffer = new ReadOnlySpan<byte>((void*)range.BaseAddress, (int)range.Size);
+        ScanChunk(range, pattern, results, buffer, maxResults);
+    }
 }
