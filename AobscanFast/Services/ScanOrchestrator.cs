@@ -127,8 +127,15 @@ public sealed class ScanOrchestrator
                                 matcher.ScanChunk(actualRange, pattern, chunkResults, buffer[..validLength], chunkResultLimit);
                             }
 
-                            chunkResults.RemoveAll(address => IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length));
-                            chunkResults.RemoveAll(address => IsExcluded(address, pattern.Length, excludedRanges));
+                            for (int i = chunkResults.Count - 1; i >= 0; i--)
+                            {
+                                nint address = chunkResults[i];
+                                if (IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length) ||
+                                    IsExcluded(address, pattern.Length, excludedRanges))
+                                {
+                                    chunkResults.RemoveAt(i);
+                                }
+                            }
                         }
                     }
                     finally
