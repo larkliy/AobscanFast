@@ -8,9 +8,8 @@ internal static class LinuxMapsParser
     public static List<MemoryRange> Parse(string mapsPath, nint minAddress, nint maxAddress, MemoryAccess access)
     {
         var regions = new List<MemoryRange>(256);
-        string[] lines = File.ReadAllLines(mapsPath);
 
-        foreach (string line in lines)
+        foreach (string line in File.ReadLines(mapsPath))
         {
             ReadOnlySpan<char> span = line.AsSpan();
 
