@@ -68,14 +68,14 @@ public class LinuxProcessHandler : IProcessHandler
                 int pathIdx = FindPathStart(span);
                 if (pathIdx < 0) continue;
 
-                string pathLine = span[pathIdx..].Trim().ToString();
+                ReadOnlySpan<char> pathLine = span[pathIdx..].Trim();
                 if (pathLine.Length == 0) continue;
 
                 const string deletedSuffix = " (deleted)";
                 if (pathLine.EndsWith(deletedSuffix, StringComparison.Ordinal))
                     pathLine = pathLine[..^deletedSuffix.Length];
 
-                string fileName = Path.GetFileName(pathLine);
+                ReadOnlySpan<char> fileName = Path.GetFileName(pathLine);
                 if (!fileName.Equals(moduleName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
