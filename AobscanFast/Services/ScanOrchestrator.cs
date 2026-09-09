@@ -68,14 +68,21 @@ public sealed class ScanOrchestrator
             ? Math.Min(1024, effectiveMaxResults)
             : 1024;
 
-        var results = new List<nint>(initialCapacity);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        Lock syncRoot = new();
-        bool internalLimitReached = false;
+        var scanContext = new ScanContext
+        {
+            Cts = CancellationTokenSource.CreateLinkedTokenSource(ct),
+            Ct = ct,
+            Pattern = pattern,
+            Matcher = matcher,
+            ExcludedRanges = excludedRanges,
+            EffectiveMaxResults = effectiveMaxResults,
+            Results = new List<nint>(initialCapacity),
+            SyncRoot = new Lock()
+        };
 
         var parallelOptions = new ParallelOptions
         {
-            CancellationToken = cts.Token,
+            CancellationToken = scanContext.Cts.Token,
             MaxDegreeOfParallelism = effectiveMaxResults > 0 || _memoryAccessor is ISelfProcessMemoryAccessor
                 ? 1
                 : options.MaxDegreeOfParallelism > 0
@@ -90,96 +97,122 @@ public sealed class ScanOrchestrator
                 parallelOptions,
                 (chunk, state) =>
                 {
-                    if (cts.IsCancellationRequested)
-                    {
-                        state.Stop();
-                        return;
-                    }
-
-                    var chunkResults = new List<nint>(64);
-                    int chunkBufSize = checked((int)chunk.Size);
-
-                    byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(chunkBufSize);
-
-                    try
-                    {
-                        fixed (byte* bufferPointer = rentedBuffer)
-                        {
-                            Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
-                            nint bufferAddress = (nint)bufferPointer;
-                            if (_memoryAccessor is ISelfProcessMemoryAccessor &&
-                                IsRangeOverlap(chunk.BaseAddress, chunkBufSize, bufferAddress, rentedBuffer.Length))
-                            {
-                                return;
-                            }
-
-                            _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
-                            if (bytesRead > (nuint)buffer.Length)
-                                throw new InvalidOperationException("Memory accessor returned more bytes than the supplied buffer can hold.");
-
-                            int validLength = checked((int)bytesRead);
-                            if (validLength >= pattern.Length)
-                            {
-                                var actualRange = new MemoryRange(chunk.BaseAddress, validLength);
-                                int chunkResultLimit = effectiveMaxResults > 0
-                                    ? effectiveMaxResults - results.Count
-                                    : 0;
-                                matcher.ScanChunk(actualRange, pattern, chunkResults, buffer[..validLength], chunkResultLimit);
-                            }
-
-                            chunkResults.RemoveAll(address => IsRangeOverlap(address, pattern.Length, bufferAddress, rentedBuffer.Length));
-                            chunkResults.RemoveAll(address => IsExcluded(address, pattern.Length, excludedRanges));
-                        }
-                    }
-                    finally
-                    {
-                        ArrayPool<byte>.Shared.Return(
-                            rentedBuffer,
-                            clearArray: _memoryAccessor is ISelfProcessMemoryAccessor);
-                    }
-
-                    if (chunkResults.Count == 0)
-                        return;
-
-                    bool limitReached = false;
-                    lock (syncRoot)
-                    {
-                        if (effectiveMaxResults > 0)
-                        {
-                            int remaining = effectiveMaxResults - results.Count;
-                            if (remaining > 0)
-                            {
-                                int take = Math.Min(remaining, chunkResults.Count);
-                                results.AddRange(chunkResults.GetRange(0, take));
-                            }
-
-                            if (results.Count >= effectiveMaxResults)
-                            {
-                                internalLimitReached = true;
-                                limitReached = true;
-                            }
-                        }
-                        else
-                        {
-                            results.AddRange(chunkResults);
-                        }
-                    }
-
-                    if (limitReached)
-                    {
-                        state.Stop();
-                        if (!ct.IsCancellationRequested)
-                            cts.Cancel();
-                    }
+                    ProcessChunk(chunk, state, scanContext);
                 });
         }
-        catch (OperationCanceledException) when (internalLimitReached && !ct.IsCancellationRequested)
+        catch (OperationCanceledException) when (scanContext.InternalLimitReached && !ct.IsCancellationRequested)
         {
+        }
+        finally
+        {
+            scanContext.Cts.Dispose();
         }
 
         ct.ThrowIfCancellationRequested();
 
-        return results;
+        return scanContext.Results;
+    }
+
+
+    private void ProcessChunk(MemoryRange chunk, ParallelLoopState state, ScanContext context)
+    {
+        if (context.Cts.IsCancellationRequested)
+        {
+            state.Stop();
+            return;
+        }
+
+        var chunkResults = new List<nint>(64);
+        int chunkBufSize = checked((int)chunk.Size);
+
+        byte[] rentedBuffer = ArrayPool<byte>.Shared.Rent(chunkBufSize);
+
+        try
+        {
+            unsafe
+            {
+                fixed (byte* bufferPointer = rentedBuffer)
+                {
+                    Span<byte> buffer = rentedBuffer.AsSpan(0, chunkBufSize);
+                    nint bufferAddress = (nint)bufferPointer;
+                    if (_memoryAccessor is ISelfProcessMemoryAccessor &&
+                        IsRangeOverlap(chunk.BaseAddress, chunkBufSize, bufferAddress, rentedBuffer.Length))
+                    {
+                        return;
+                    }
+
+                    _memoryAccessor.ReadMemory(chunk.BaseAddress, buffer, out nuint bytesRead);
+                    if (bytesRead > (nuint)buffer.Length)
+                        throw new InvalidOperationException("Memory accessor returned more bytes than the supplied buffer can hold.");
+
+                    int validLength = checked((int)bytesRead);
+                    if (validLength >= context.Pattern.Length)
+                    {
+                        var actualRange = new MemoryRange(chunk.BaseAddress, validLength);
+                        int chunkResultLimit = context.EffectiveMaxResults > 0
+                            ? context.EffectiveMaxResults - context.Results.Count
+                            : 0;
+                        context.Matcher.ScanChunk(actualRange, context.Pattern, chunkResults, buffer[..validLength], chunkResultLimit);
+                    }
+
+                    chunkResults.RemoveAll(address => IsRangeOverlap(address, context.Pattern.Length, bufferAddress, rentedBuffer.Length));
+                    chunkResults.RemoveAll(address => IsExcluded(address, context.Pattern.Length, context.ExcludedRanges));
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(
+                rentedBuffer,
+                clearArray: _memoryAccessor is ISelfProcessMemoryAccessor);
+        }
+
+        if (chunkResults.Count == 0)
+            return;
+
+        bool limitReached = false;
+        lock (context.SyncRoot)
+        {
+            if (context.EffectiveMaxResults > 0)
+            {
+                int remaining = context.EffectiveMaxResults - context.Results.Count;
+                if (remaining > 0)
+                {
+                    int take = Math.Min(remaining, chunkResults.Count);
+                    context.Results.AddRange(chunkResults.GetRange(0, take));
+                }
+
+                if (context.Results.Count >= context.EffectiveMaxResults)
+                {
+                    context.InternalLimitReached = true;
+                    limitReached = true;
+                }
+            }
+            else
+            {
+                context.Results.AddRange(chunkResults);
+            }
+        }
+
+        if (limitReached)
+        {
+            state.Stop();
+            if (!context.Ct.IsCancellationRequested)
+                context.Cts.Cancel();
+        }
+    }
+
+    private sealed class ScanContext
+    {
+        public required CancellationTokenSource Cts { get; init; }
+        public required CancellationToken Ct { get; init; }
+        public required AobPattern Pattern { get; init; }
+        public required IPatternMatcher Matcher { get; init; }
+        public required MemoryRange[] ExcludedRanges { get; init; }
+        public required int EffectiveMaxResults { get; init; }
+        public required List<nint> Results { get; init; }
+        public required Lock SyncRoot { get; init; }
+        public bool InternalLimitReached { get; set; }
     }
 
     private static unsafe MemoryRange[] CreateExcludedRanges(

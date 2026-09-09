@@ -4,12 +4,12 @@
 [Flags]
 public enum MemoryAccess
 {
-	/// <summary>No memory access requirement.</summary>
-	None = 0,
-	/// <summary>Readable memory.</summary>
-	Readable = 1,
-	/// <summary>Writable memory.</summary>
-	Writable = 2,
-	/// <summary>Executable memory.</summary>
-	Executable = 4
+    /// <summary>No memory access requirement.</summary>
+    None = 0,
+    /// <summary>Readable memory.</summary>
+    Readable = 1,
+    /// <summary>Writable memory.</summary>
+    Writable = 2,
+    /// <summary>Executable memory.</summary>
+    Executable = 4
 }
