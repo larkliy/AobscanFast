@@ -1,6 +1,7 @@
 using AobscanFast.Core.Interfaces;
 using AobscanFast.Core.Models;
 using Windows.Win32;
+using Windows.Win32.System.Memory;
 
 namespace AobscanFast.Infrastructure.Windows;
 
@@ -8,30 +9,19 @@ namespace AobscanFast.Infrastructure.Windows;
 public sealed class CurrentProcessRegionEnumerator : IMemoryRegionEnumerator
 {
     /// <inheritdoc/>
-    public unsafe List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
+    public List<MemoryRange> GetRegions(nint minAddress, nint maxAddress, MemoryAccess access)
     {
-        nint currentAddress = minAddress;
-        var regions = new List<MemoryRange>(256);
+        return new InternalEnumerator().GetRegions(minAddress, maxAddress, access);
+    }
 
-        while (currentAddress < maxAddress)
+    private sealed class InternalEnumerator : WindowsRegionEnumeratorBase
+    {
+        protected override nuint QueryMemory(nint address, out MEMORY_BASIC_INFORMATION memoryInfo)
         {
-            if (PInvoke.VirtualQuery(currentAddress.ToPointer(), out var memoryInfo) == 0)
-                break;
-
-            nint regionStart = (nint)memoryInfo.BaseAddress;
-            nint regionEnd = checked(regionStart + (nint)memoryInfo.RegionSize);
-            nint scanStart = Math.Max(regionStart, minAddress);
-            nint scanEnd = Math.Min(regionEnd, maxAddress);
-
-            if (scanEnd > scanStart && WindowsMemoryProtectionEvaluator.IsScannable(memoryInfo, access))
-                regions.Add(new MemoryRange(scanStart, scanEnd - scanStart));
-
-            if (regionEnd <= currentAddress)
-                break;
-
-            currentAddress = regionEnd;
+            unsafe
+            {
+                return PInvoke.VirtualQuery(address.ToPointer(), out memoryInfo);
+            }
         }
-
-        return regions;
     }
 }
