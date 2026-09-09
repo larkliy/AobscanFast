@@ -24,8 +24,8 @@ class AobError(RuntimeError):
 
 
 class _Library:
-    def __init__(self, path: Optional[str] = None):
-        self._cdll = ctypes.CDLL(str(Path(path) if path else self._bundled_name()))
+    def __init__(self):
+        self._cdll = ctypes.CDLL(str(self._bundled_name()))
         lib = self._cdll
         c_uint64_p = ctypes.POINTER(ctypes.c_uint64)
         c_int_p = ctypes.POINTER(ctypes.c_int)
@@ -89,8 +89,8 @@ class _Library:
 class AobScanner:
     """A scanner bound to the current process or a remote process by pid."""
 
-    def __init__(self, pid: Optional[int] = None, library_path: Optional[str] = None):
-        self._lib = _Library(library_path)
+    def __init__(self, pid: Optional[int] = None):
+        self._lib = _Library()
         handle = (
             self._lib._cdll.aob_scanner_create_current()
             if pid is None
@@ -208,12 +208,12 @@ class AobScanner:
 
     @staticmethod
     def find_pid_by_name(
-        name: str, index: int = 0, library_path: Optional[str] = None
+        name: str, index: int = 0
     ) -> Optional[int]:
         """Find a process by executable name."""
         if not name:
             raise ValueError("name must not be empty")
-        lib = _Library(library_path)
+        lib = _Library()
         pid = lib._cdll.aob_find_pid_by_name(name.encode(), index)
         if pid < 0:
             raise AobError(lib.last_error() or "find failed")
